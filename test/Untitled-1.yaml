@@ -1,0 +1,6 @@
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/fallback.png
+    - assets/images/carved.png
