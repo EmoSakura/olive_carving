@@ -1,151 +1,42 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_models.dart';
+import 'app_theme.dart';
+import 'auth_screen.dart';
+import 'backend_gateway.dart';
+import 'content_repository.dart';
+import 'admin_screen.dart';
+import 'home_screen.dart';
 import 'interaction_screen.dart';
+import 'product_models.dart';
+import 'user_state_repository.dart';
 
-class AppColors {
-  static const Color background = Color(0xFF111111);
-  static const Color surface = Color(0xFF1C1C1C);
-  static const Color surfaceSoft = Color(0xFF26221D);
-  static const Color accent = Color(0xFFD4AF37);
-  static const Color textPrimary = Color(0xFFF2EEE7);
-  static const Color textSecondary = Color(0xFFAEA79B);
-  static const Color ink = Color(0xFF3E2F23);
-}
-
-class IntroPageData {
-  final String title;
-  final String subtitle;
-  final String note;
-
-  const IntroPageData({
-    required this.title,
-    required this.subtitle,
-    required this.note,
-  });
-
-  factory IntroPageData.fromJson(Map<String, dynamic> json) {
-    return IntroPageData(
-      title: json['title'] as String,
-      subtitle: json['subtitle'] as String,
-      note: json['note'] as String,
-    );
-  }
-}
-
-class Exhibit {
-  final String id;
-  final String title;
-  final String author;
-  final String era;
-  final String category;
-  final String technique;
-  final String description;
-  final String story;
-  final String image;
-
-  const Exhibit({
-    required this.id,
-    required this.title,
-    required this.author,
-    required this.era,
-    required this.category,
-    required this.technique,
-    required this.description,
-    required this.story,
-    required this.image,
-  });
-
-  factory Exhibit.fromJson(Map<String, dynamic> json) {
-    return Exhibit(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      author: json['author'] as String,
-      era: json['era'] as String,
-      category: json['category'] as String,
-      technique: json['technique'] as String,
-      description: json['description'] as String,
-      story: json['story'] as String,
-      image: json['image'] as String,
-    );
-  }
-}
-
-class CraftStep {
-  final String title;
-  final String summary;
-  final String detail;
-  final String focus;
-
-  const CraftStep({
-    required this.title,
-    required this.summary,
-    required this.detail,
-    required this.focus,
-  });
-
-  factory CraftStep.fromJson(Map<String, dynamic> json) {
-    return CraftStep(
-      title: json['title'] as String,
-      summary: json['summary'] as String,
-      detail: json['detail'] as String,
-      focus: json['focus'] as String,
-    );
-  }
-}
-
-class AppContent {
-  final List<IntroPageData> introPages;
-  final List<Exhibit> exhibits;
-  final List<CraftStep> craftSteps;
-  final String featuredQuote;
-
-  const AppContent({
-    required this.introPages,
-    required this.exhibits,
-    required this.craftSteps,
-    required this.featuredQuote,
-  });
-
-  factory AppContent.fromJson(Map<String, dynamic> json) {
-    return AppContent(
-      introPages: (json['introPages'] as List<dynamic>)
-          .map((item) => IntroPageData.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      exhibits: (json['exhibits'] as List<dynamic>)
-          .map((item) => Exhibit.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      craftSteps: (json['craftSteps'] as List<dynamic>)
-          .map((item) => CraftStep.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      featuredQuote: json['featuredQuote'] as String,
-    );
-  }
-}
-
-class LocalContentRepository {
-  const LocalContentRepository();
-
-  Future<AppContent> load() async {
-    final rawJson = await rootBundle.loadString('assets/data/content.json');
-    final decoded = jsonDecode(rawJson) as Map<String, dynamic>;
-    return AppContent.fromJson(decoded);
-  }
-}
-
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
-  runApp(const OliveApp());
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+  final backendConfig = await BackendConfigLoader.load();
+  if (backendConfig.isConfigured) {
+    await Supabase.initialize(
+      url: backendConfig.supabaseUrl,
+      anonKey: backendConfig.supabaseAnonKey,
+    );
+  }
+  runApp(OliveApp(backendConfig: backendConfig));
 }
 
 class OliveApp extends StatelessWidget {
-  const OliveApp({super.key});
+  final BackendConfig backendConfig;
+
+  const OliveApp({super.key, required this.backendConfig});
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +50,48 @@ class OliveApp extends StatelessWidget {
           primary: AppColors.accent,
           surface: AppColors.surface,
         ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: AppColors.surfaceSoft,
+          labelStyle: const TextStyle(color: AppColors.textSecondary),
+          hintStyle: TextStyle(
+            color: AppColors.textSecondary.withAlphaValue(0.74),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: Colors.white10),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.accent),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: AppColors.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: const BorderSide(color: Colors.white10),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: AppColors.surface,
+          indicatorColor: AppColors.accent.withAlphaValue(0.18),
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+            ),
+          ),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -167,13 +100,29 @@ class OliveApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const AppBootstrap(),
+      home: AppBootstrap(backendConfig: backendConfig),
     );
   }
 }
 
+class _BootstrapPayload {
+  final AppContent content;
+  final AppUserState userState;
+  final AppSession? session;
+  final AdminWorkspace adminWorkspace;
+
+  const _BootstrapPayload({
+    required this.content,
+    required this.userState,
+    required this.session,
+    required this.adminWorkspace,
+  });
+}
+
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+  final BackendConfig backendConfig;
+
+  const AppBootstrap({super.key, required this.backendConfig});
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -181,7 +130,8 @@ class AppBootstrap extends StatefulWidget {
 
 class _AppBootstrapState extends State<AppBootstrap>
     with SingleTickerProviderStateMixin {
-  late final Future<AppContent> _contentFuture;
+  late final BackendGateway _backendGateway;
+  late final Future<_BootstrapPayload> _bootstrapFuture;
   late final AnimationController _controller;
   late final Animation<double> _fadeAnimation;
   bool _showIntro = false;
@@ -189,7 +139,8 @@ class _AppBootstrapState extends State<AppBootstrap>
   @override
   void initState() {
     super.initState();
-    _contentFuture = const LocalContentRepository().load();
+    _backendGateway = createBackendGateway(widget.backendConfig);
+    _bootstrapFuture = _loadBootstrap();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -207,6 +158,21 @@ class _AppBootstrapState extends State<AppBootstrap>
     });
   }
 
+  Future<_BootstrapPayload> _loadBootstrap() async {
+    final content = await const LocalContentRepository().load();
+    final userState = await const UserStateRepository().load();
+    final session = await _backendGateway.restoreSession();
+    final adminWorkspace = await _backendGateway.loadAdminWorkspace(
+      content.exhibits,
+    );
+    return _BootstrapPayload(
+      content: content,
+      userState: userState,
+      session: session,
+      adminWorkspace: adminWorkspace,
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -215,8 +181,8 @@ class _AppBootstrapState extends State<AppBootstrap>
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<AppContent>(
-      future: _contentFuture,
+    return FutureBuilder<_BootstrapPayload>(
+      future: _bootstrapFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _BootstrapErrorView();
@@ -226,7 +192,23 @@ class _AppBootstrapState extends State<AppBootstrap>
           return SplashScreen(fadeAnimation: _fadeAnimation);
         }
 
-        return IntroScreen(content: snapshot.data!);
+        final payload = snapshot.data!;
+        if (payload.session != null) {
+          return MainNavigationScreen(
+            content: payload.content,
+            initialUserState: payload.userState,
+            session: payload.session!,
+            initialAdminWorkspace: payload.adminWorkspace,
+            backendGateway: _backendGateway,
+          );
+        }
+
+        return IntroScreen(
+          content: payload.content,
+          initialUserState: payload.userState,
+          initialAdminWorkspace: payload.adminWorkspace,
+          backendGateway: _backendGateway,
+        );
       },
     );
   }
@@ -235,10 +217,7 @@ class _AppBootstrapState extends State<AppBootstrap>
 class SplashScreen extends StatelessWidget {
   final Animation<double> fadeAnimation;
 
-  const SplashScreen({
-    super.key,
-    required this.fadeAnimation,
-  });
+  const SplashScreen({super.key, required this.fadeAnimation});
 
   @override
   Widget build(BuildContext context) {
@@ -256,10 +235,12 @@ class SplashScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.accent.withOpacity(0.7)),
+                      border: Border.all(
+                        color: AppColors.accent.withAlphaValue(0.7),
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.accent.withOpacity(0.16),
+                          color: AppColors.accent.withAlphaValue(0.16),
                           blurRadius: 24,
                           spreadRadius: 4,
                         ),
@@ -286,7 +267,7 @@ class SplashScreen extends StatelessWidget {
                     '数字传承 · 指尖沉浸',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary.withOpacity(0.9),
+                      color: AppColors.textSecondary.withAlphaValue(0.9),
                       letterSpacing: 4,
                     ),
                   ),
@@ -302,10 +283,16 @@ class SplashScreen extends StatelessWidget {
 
 class IntroScreen extends StatefulWidget {
   final AppContent content;
+  final AppUserState initialUserState;
+  final AdminWorkspace initialAdminWorkspace;
+  final BackendGateway backendGateway;
 
   const IntroScreen({
     super.key,
     required this.content,
+    required this.initialUserState,
+    required this.initialAdminWorkspace,
+    required this.backendGateway,
   });
 
   @override
@@ -334,7 +321,7 @@ class _IntroScreenState extends State<IntroScreen> {
               Text(
                 '新中式极简主义',
                 style: TextStyle(
-                  color: AppColors.accent.withOpacity(0.9),
+                  color: AppColors.accent.withAlphaValue(0.9),
                   letterSpacing: 3,
                   fontSize: 12,
                 ),
@@ -377,7 +364,7 @@ class _IntroScreenState extends State<IntroScreen> {
                     decoration: BoxDecoration(
                       color: index == _pageIndex
                           ? AppColors.accent
-                          : AppColors.textSecondary.withOpacity(0.35),
+                          : AppColors.textSecondary.withAlphaValue(0.35),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -399,7 +386,25 @@ class _IntroScreenState extends State<IntroScreen> {
                   onPressed: () {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
-                        builder: (_) => MainNavigationScreen(content: widget.content),
+                        builder: (authContext) => AuthScreen(
+                          content: widget.content,
+                          initialUserState: widget.initialUserState,
+                          backendGateway: widget.backendGateway,
+                          onSignedIn: (session) async {
+                            Navigator.of(authContext).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => MainNavigationScreen(
+                                  content: widget.content,
+                                  initialUserState: widget.initialUserState,
+                                  session: session,
+                                  initialAdminWorkspace:
+                                      widget.initialAdminWorkspace,
+                                  backendGateway: widget.backendGateway,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },
@@ -412,7 +417,7 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
                   ),
                   child: const Text(
-                    '进入榄雕云艺',
+                    '登录并进入产品',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -427,10 +432,18 @@ class _IntroScreenState extends State<IntroScreen> {
 
 class MainNavigationScreen extends StatefulWidget {
   final AppContent content;
+  final AppUserState initialUserState;
+  final AppSession session;
+  final AdminWorkspace initialAdminWorkspace;
+  final BackendGateway backendGateway;
 
   const MainNavigationScreen({
     super.key,
     required this.content,
+    required this.initialUserState,
+    required this.session,
+    required this.initialAdminWorkspace,
+    required this.backendGateway,
   });
 
   @override
@@ -439,50 +452,178 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
-  final Set<String> _favoriteExhibitIds = <String>{};
-  final List<String> _recentExhibitIds = <String>[];
-  final Set<String> _learnedStepTitles = <String>{};
+  late AppUserState _userState;
+  late AdminWorkspace _adminWorkspace;
+
+  @override
+  void initState() {
+    super.initState();
+    _userState = widget.initialUserState;
+    _adminWorkspace = widget.initialAdminWorkspace;
+  }
+
+  void _persistUserState() {
+    unawaited(const UserStateRepository().save(_userState));
+  }
+
+  void _persistAdminWorkspace() {
+    unawaited(widget.backendGateway.saveAdminWorkspace(_adminWorkspace));
+  }
 
   void _toggleFavoriteExhibit(String exhibitId) {
+    final favorites = Set<String>.from(_userState.favoriteExhibitIds);
+    if (!favorites.add(exhibitId)) {
+      favorites.remove(exhibitId);
+    }
     setState(() {
-      if (!_favoriteExhibitIds.add(exhibitId)) {
-        _favoriteExhibitIds.remove(exhibitId);
-      }
+      _userState = _userState.copyWith(favoriteExhibitIds: favorites);
     });
+    _persistUserState();
   }
 
   void _registerExhibitViewed(String exhibitId) {
+    final recent = List<String>.from(_userState.recentExhibitIds);
+    recent.remove(exhibitId);
+    recent.insert(0, exhibitId);
+    if (recent.length > 5) {
+      recent.removeRange(5, recent.length);
+    }
     setState(() {
-      _recentExhibitIds.remove(exhibitId);
-      _recentExhibitIds.insert(0, exhibitId);
-      if (_recentExhibitIds.length > 5) {
-        _recentExhibitIds.removeRange(5, _recentExhibitIds.length);
-      }
+      _userState = _userState.copyWith(recentExhibitIds: recent);
     });
+    _persistUserState();
   }
 
   void _markStepLearned(String stepTitle) {
+    final learned = Set<String>.from(_userState.learnedStepTitles)
+      ..add(stepTitle);
     setState(() {
-      _learnedStepTitles.add(stepTitle);
+      _userState = _userState.copyWith(learnedStepTitles: learned);
     });
+    _persistUserState();
+  }
+
+  void _updateCarvingHistory(List<CarvingRecord> history) {
+    setState(() {
+      _userState = _userState.copyWith(carvingHistory: history);
+    });
+    _persistUserState();
+  }
+
+  void _updateManagedExhibit(ManagedExhibitState nextState) {
+    setState(() {
+      _adminWorkspace = _adminWorkspace.update(nextState);
+    });
+    _persistAdminWorkspace();
+  }
+
+  Future<void> _handleLogout() async {
+    await widget.backendGateway.signOut();
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (authContext) => AuthScreen(
+          content: widget.content,
+          initialUserState: _userState,
+          backendGateway: widget.backendGateway,
+          onSignedIn: (session) async {
+            Navigator.of(authContext).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => MainNavigationScreen(
+                  content: widget.content,
+                  initialUserState: _userState,
+                  session: session,
+                  initialAdminWorkspace: _adminWorkspace,
+                  backendGateway: widget.backendGateway,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final visibleExhibits = widget.content.exhibits
+        .where((item) => _adminWorkspace.stateFor(item.id).published)
+        .toList();
+    final destinations = <NavigationDestination>[
+      const NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: '首页',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.photo_library_outlined),
+        selectedIcon: Icon(Icons.photo_library),
+        label: '数字展馆',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.layers_outlined),
+        selectedIcon: Icon(Icons.layers),
+        label: '工艺解构',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.gesture_outlined),
+        selectedIcon: Icon(Icons.gesture),
+        label: '指尖互动',
+      ),
+    ];
+    if (widget.session.role == UserRole.admin) {
+      destinations.add(
+        const NavigationDestination(
+          icon: Icon(Icons.admin_panel_settings_outlined),
+          selectedIcon: Icon(Icons.admin_panel_settings),
+          label: '后台',
+        ),
+      );
+    }
     final pages = [
+      HomeScreen(
+        session: widget.session,
+        content: widget.content,
+        userState: _userState,
+        adminWorkspace: _adminWorkspace,
+        onOpenGallery: () => setState(() => _currentIndex = 1),
+        onOpenProcess: () => setState(() => _currentIndex = 2),
+        onOpenInteraction: () => setState(() => _currentIndex = 3),
+        onOpenAdmin: () {
+          if (widget.session.role == UserRole.admin) {
+            setState(() => _currentIndex = 4);
+          }
+        },
+        onLogout: _handleLogout,
+      ),
       GalleryScreen(
-        exhibits: widget.content.exhibits,
-        favoriteExhibitIds: _favoriteExhibitIds,
-        recentExhibitIds: _recentExhibitIds,
+        featuredCollections: const <FeaturedCollection>[],
+        exhibits: visibleExhibits,
+        favoriteExhibitIds: _userState.favoriteExhibitIds,
+        recentExhibitIds: _userState.recentExhibitIds,
+        adminWorkspace: _adminWorkspace,
         onToggleFavorite: _toggleFavoriteExhibit,
         onExhibitViewed: _registerExhibitViewed,
       ),
       ProcessScreen(
         steps: widget.content.craftSteps,
-        learnedStepTitles: _learnedStepTitles,
+        learnedStepTitles: _userState.learnedStepTitles,
         onStepLearned: _markStepLearned,
       ),
-      const InteractionScreen(),
+      InteractionScreen(
+        initialHistory: _userState.carvingHistory,
+        onHistoryChanged: _updateCarvingHistory,
+      ),
+      if (widget.session.role == UserRole.admin)
+        AdminScreen(
+          workspace: _adminWorkspace,
+          exhibits: widget.content.exhibits,
+          onUpdateExhibitState: _updateManagedExhibit,
+        ),
     ];
 
     return Scaffold(
@@ -490,47 +631,35 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: NavigationBar(
         backgroundColor: AppColors.surface,
         selectedIndex: _currentIndex,
-        indicatorColor: AppColors.accent.withOpacity(0.18),
+        indicatorColor: AppColors.accent.withAlphaValue(0.18),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.photo_library_outlined),
-            selectedIcon: Icon(Icons.photo_library),
-            label: '数字展馆',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.layers_outlined),
-            selectedIcon: Icon(Icons.layers),
-            label: '工艺解构',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.gesture_outlined),
-            selectedIcon: Icon(Icons.gesture),
-            label: '指尖互动',
-          ),
-        ],
+        destinations: destinations,
       ),
     );
   }
 }
 
 class GalleryScreen extends StatefulWidget {
+  final List<FeaturedCollection> featuredCollections;
   final List<Exhibit> exhibits;
   final Set<String> favoriteExhibitIds;
   final List<String> recentExhibitIds;
+  final AdminWorkspace adminWorkspace;
   final ValueChanged<String> onToggleFavorite;
   final ValueChanged<String> onExhibitViewed;
 
   const GalleryScreen({
     super.key,
+    required this.featuredCollections,
     required this.exhibits,
     required this.favoriteExhibitIds,
     required this.recentExhibitIds,
+    required this.adminWorkspace,
     required this.onToggleFavorite,
     required this.onExhibitViewed,
   });
@@ -543,33 +672,50 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String _selectedCategory = '全部';
   String _searchQuery = '';
   bool _favoritesOnly = false;
+  String? _selectedCollectionId;
 
   List<String> get _categories => [
-        '全部',
-        ...widget.exhibits.map((e) => e.category).toSet(),
-      ];
+    '全部',
+    ...widget.exhibits.map((e) => e.category).toSet(),
+  ];
 
   List<Exhibit> get _filteredExhibits {
+    final activeCollection = _activeCollection;
     return widget.exhibits.where((item) {
       final matchesCategory =
           _selectedCategory == '全部' || item.category == _selectedCategory;
       final matchesFavorite =
           !_favoritesOnly || widget.favoriteExhibitIds.contains(item.id);
+      final matchesCollection =
+          activeCollection == null ||
+          activeCollection.exhibitIds.contains(item.id);
       final query = _searchQuery.trim().toLowerCase();
       final searchableText =
           '${item.title} ${item.author} ${item.category} ${item.technique} ${item.era}'
               .toLowerCase();
       final matchesSearch = query.isEmpty || searchableText.contains(query);
-      return matchesCategory && matchesFavorite && matchesSearch;
+      return matchesCategory &&
+          matchesFavorite &&
+          matchesCollection &&
+          matchesSearch;
     }).toList();
+  }
+
+  FeaturedCollection? get _activeCollection {
+    for (final collection in widget.featuredCollections) {
+      if (collection.id == _selectedCollectionId) {
+        return collection;
+      }
+    }
+    return null;
   }
 
   List<Exhibit> get _recentExhibits => widget.recentExhibitIds
       .map(
         (id) => widget.exhibits.cast<Exhibit?>().firstWhere(
-              (item) => item?.id == id,
-              orElse: () => null,
-            ),
+          (item) => item?.id == id,
+          orElse: () => null,
+        ),
       )
       .whereType<Exhibit>()
       .toList();
@@ -648,6 +794,80 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
                   ],
                 ),
+                if (widget.featuredCollections.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '精选策展路线',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (_activeCollection != null)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedCollectionId = null;
+                            });
+                          },
+                          child: const Text('清除路线'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 156,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.featuredCollections.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final collection = widget.featuredCollections[index];
+                        final isSelected =
+                            collection.id == _selectedCollectionId;
+                        return _FeaturedCollectionCard(
+                          collection: collection,
+                          selected: isSelected,
+                          onTap: () {
+                            setState(() {
+                              _selectedCollectionId = isSelected
+                                  ? null
+                                  : collection.id;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                if (_activeCollection != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withAlphaValue(0.12),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: AppColors.accent.withAlphaValue(0.26),
+                      ),
+                    ),
+                    child: Text(
+                      '当前路线：${_activeCollection!.title}，共锁定 ${_activeCollection!.exhibitIds.length} 件重点展品。',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        height: 1.7,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   onChanged: (value) {
@@ -659,7 +879,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   decoration: InputDecoration(
                     hintText: '搜索作品名称、作者、题材或技法',
                     hintStyle: TextStyle(
-                      color: AppColors.textSecondary.withOpacity(0.85),
+                      color: AppColors.textSecondary.withAlphaValue(0.85),
                     ),
                     prefixIcon: const Icon(
                       Icons.search,
@@ -693,7 +913,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         selectedColor: AppColors.accent,
                         showCheckmark: false,
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.black : AppColors.textSecondary,
+                          color: isSelected
+                              ? Colors.black
+                              : AppColors.textSecondary,
                         ),
                         backgroundColor: AppColors.surface,
                         shape: RoundedRectangleBorder(
@@ -701,7 +923,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         ),
                       );
                     },
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 10),
                     itemCount: _categories.length,
                   ),
                 ),
@@ -719,11 +942,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: _favoritesOnly
-                          ? AppColors.accent.withOpacity(0.16)
+                          ? AppColors.accent.withAlphaValue(0.16)
                           : AppColors.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: _favoritesOnly ? AppColors.accent : Colors.white10,
+                        color: _favoritesOnly
+                            ? AppColors.accent
+                            : Colors.white10,
                       ),
                     ),
                     child: Row(
@@ -765,7 +990,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _recentExhibits.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final exhibit = _recentExhibits[index];
                         return ActionChip(
@@ -784,9 +1010,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                               MaterialPageRoute(
                                 builder: (_) => ExhibitDetailScreen(
                                   exhibit: exhibit,
-                                  isFavorite: widget.favoriteExhibitIds.contains(
-                                    exhibit.id,
-                                  ),
+                                  isFavorite: widget.favoriteExhibitIds
+                                      .contains(exhibit.id),
                                   onToggleFavorite: () =>
                                       widget.onToggleFavorite(exhibit.id),
                                 ),
@@ -844,35 +1069,37 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ),
                 )
               : SliverGrid(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final exhibit = _filteredExhibits[index];
-                      final aspectRatio = index.isEven ? 0.72 : 0.84;
-                      return _GalleryCard(
-                        exhibit: exhibit,
-                        aspectRatio: aspectRatio,
-                        isFavorite: widget.favoriteExhibitIds.contains(exhibit.id),
-                        onToggleFavorite: () =>
-                            widget.onToggleFavorite(exhibit.id),
-                        onOpen: () {
-                          widget.onExhibitViewed(exhibit.id);
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ExhibitDetailScreen(
-                                exhibit: exhibit,
-                                isFavorite: widget.favoriteExhibitIds.contains(
-                                  exhibit.id,
-                                ),
-                                onToggleFavorite: () =>
-                                    widget.onToggleFavorite(exhibit.id),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final exhibit = _filteredExhibits[index];
+                    final aspectRatio = index.isEven ? 0.72 : 0.84;
+                    return _GalleryCard(
+                      exhibit: exhibit,
+                      aspectRatio: aspectRatio,
+                      isFeatured: widget.adminWorkspace
+                          .stateFor(exhibit.id)
+                          .featured,
+                      isFavorite: widget.favoriteExhibitIds.contains(
+                        exhibit.id,
+                      ),
+                      onToggleFavorite: () =>
+                          widget.onToggleFavorite(exhibit.id),
+                      onOpen: () {
+                        widget.onExhibitViewed(exhibit.id);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ExhibitDetailScreen(
+                              exhibit: exhibit,
+                              isFavorite: widget.favoriteExhibitIds.contains(
+                                exhibit.id,
                               ),
+                              onToggleFavorite: () =>
+                                  widget.onToggleFavorite(exhibit.id),
                             ),
-                          );
-                        },
-                      );
-                    },
-                    childCount: _filteredExhibits.length,
-                  ),
+                          ),
+                        );
+                      },
+                    );
+                  }, childCount: _filteredExhibits.length),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 14,
@@ -882,6 +1109,109 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _FeaturedCollectionCard extends StatelessWidget {
+  final FeaturedCollection collection;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FeaturedCollectionCard({
+    required this.collection,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: onTap,
+          child: Ink(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: selected
+                    ? [const Color(0xFF4B381F), const Color(0xFF1A1611)]
+                    : [const Color(0xFF2A211B), AppColors.surface],
+              ),
+              border: Border.all(
+                color: selected ? AppColors.accent : Colors.white10,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        collection.title,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      selected ? Icons.check_circle : Icons.north_east,
+                      color: selected
+                          ? AppColors.accent
+                          : AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  collection.subtitle,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.7,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlphaValue(0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    collection.estimatedTime,
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  collection.highlight,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -942,6 +1272,7 @@ class _GalleryMetricCard extends StatelessWidget {
 class _GalleryCard extends StatelessWidget {
   final Exhibit exhibit;
   final double aspectRatio;
+  final bool isFeatured;
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
   final VoidCallback onOpen;
@@ -949,6 +1280,7 @@ class _GalleryCard extends StatelessWidget {
   const _GalleryCard({
     required this.exhibit,
     required this.aspectRatio,
+    required this.isFeatured,
     required this.isFavorite,
     required this.onToggleFavorite,
     required this.onOpen,
@@ -997,6 +1329,30 @@ class _GalleryCard extends StatelessWidget {
                             child: AssetArtwork(
                               path: exhibit.image,
                               fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Visibility(
+                          visible: isFeatured,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.42),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              '首页精选',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
@@ -1056,7 +1412,7 @@ class _GalleryCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withOpacity(0.12),
+                          color: AppColors.accent.withAlphaValue(0.12),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
@@ -1113,10 +1469,7 @@ class _ExhibitDetailScreenState extends State<ExhibitDetailScreen> {
               maxScale: 5,
               child: Hero(
                 tag: exhibit.id,
-                child: AssetArtwork(
-                  path: exhibit.image,
-                  fit: BoxFit.contain,
-                ),
+                child: AssetArtwork(path: exhibit.image, fit: BoxFit.contain),
               ),
             ),
           ),
@@ -1155,7 +1508,7 @@ class _ExhibitDetailScreenState extends State<ExhibitDetailScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(22, 22, 22, 28),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.82),
+                  color: Colors.black.withAlphaValue(0.82),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(28),
                   ),
@@ -1187,7 +1540,7 @@ class _ExhibitDetailScreenState extends State<ExhibitDetailScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.accent.withOpacity(0.14),
+                              color: AppColors.accent.withAlphaValue(0.14),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -1219,7 +1572,7 @@ class _ExhibitDetailScreenState extends State<ExhibitDetailScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.surface.withOpacity(0.72),
+                          color: AppColors.surface.withAlphaValue(0.72),
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Text(
@@ -1312,7 +1665,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
                 style: TextStyle(
                   fontSize: 72,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.accent.withOpacity(0.5),
+                  color: AppColors.accent.withAlphaValue(0.5),
                   letterSpacing: 6,
                 ),
               ),
@@ -1346,7 +1699,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
                   child: Text(
                     '把选料、构思、粗雕、精雕与抛光拆成可以被感知的阅读节奏，让工艺不再只是大段说明。',
                     style: TextStyle(
-                      color: AppColors.textSecondary.withOpacity(0.92),
+                      color: AppColors.textSecondary.withAlphaValue(0.92),
                       fontSize: 14,
                       height: 1.8,
                     ),
@@ -1400,7 +1753,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
                                 value: widget.steps.isEmpty
                                     ? 0
                                     : widget.learnedStepTitles.length /
-                                        widget.steps.length,
+                                          widget.steps.length,
                                 strokeWidth: 7,
                                 backgroundColor: Colors.white12,
                                 valueColor: const AlwaysStoppedAnimation<Color>(
@@ -1527,15 +1880,745 @@ class _ProcessScreenState extends State<ProcessScreen> {
   }
 }
 
+class ServiceHubScreen extends StatefulWidget {
+  final AppContent content;
+  final List<ServiceInquiry> inquiries;
+  final int favoriteCount;
+  final int archivedWorkCount;
+  final int learnedStepCount;
+  final ValueChanged<ServiceInquiry> onSubmitInquiry;
+
+  const ServiceHubScreen({
+    super.key,
+    required this.content,
+    required this.inquiries,
+    required this.favoriteCount,
+    required this.archivedWorkCount,
+    required this.learnedStepCount,
+    required this.onSubmitInquiry,
+  });
+
+  @override
+  State<ServiceHubScreen> createState() => _ServiceHubScreenState();
+}
+
+class _ServiceHubScreenState extends State<ServiceHubScreen> {
+  static const List<String> _budgetOptions = [
+    '5,000 元以内',
+    '5,000 - 20,000 元',
+    '20,000 - 50,000 元',
+    '50,000 元以上',
+  ];
+
+  final TextEditingController _contactController = TextEditingController();
+  final TextEditingController _organizationController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+  String? _selectedPackageId;
+  String _selectedBudget = _budgetOptions.first;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.content.servicePackages.isNotEmpty) {
+      _selectedPackageId = widget.content.servicePackages.first.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _contactController.dispose();
+    _organizationController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedPackage = widget.content.servicePackages.where(
+      (item) => item.id == _selectedPackageId,
+    );
+    final activePackage = selectedPackage.isEmpty
+        ? null
+        : selectedPackage.first;
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 180,
+          pinned: true,
+          flexibleSpace: FlexibleSpaceBar(
+            titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+            title: const Align(
+              alignment: Alignment.bottomLeft,
+              child: Text(
+                '服务中心',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            background: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF34281E), Color(0xFF111111)],
+                ),
+              ),
+              child: const _DecorativeGrid(),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF2D2218), Color(0xFF181818)],
+                    ),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '把非遗内容做成可展示、可教学、可转化的数字方案',
+                        style: TextStyle(
+                          color: AppColors.accent.withAlphaValue(0.96),
+                          fontSize: 12,
+                          letterSpacing: 2.2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '这里不只展示作品，也提供校馆合作、品牌活动与课程研学的落地服务框架。',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _ServiceMetricPill(
+                            label: '收藏展品',
+                            value: '${widget.favoriteCount}',
+                          ),
+                          _ServiceMetricPill(
+                            label: '学习步骤',
+                            value: '${widget.learnedStepCount}',
+                          ),
+                          _ServiceMetricPill(
+                            label: '归档作品',
+                            value: '${widget.archivedWorkCount}',
+                          ),
+                          _ServiceMetricPill(
+                            label: '服务包',
+                            value: '${widget.content.servicePackages.length}',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
+                  '商业化服务包',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...widget.content.servicePackages.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _ServicePackageCard(
+                      item: item,
+                      selected: item.id == _selectedPackageId,
+                      onTap: () {
+                        setState(() {
+                          _selectedPackageId = item.id;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '传承人与团队气质',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 182,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.content.masters.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      return _MasterProfileCard(
+                        profile: widget.content.masters[index],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  '品牌叙事时间线',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 172,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.content.timeline.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      return _TimelineCard(
+                        item: widget.content.timeline[index],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '合作需求登记',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        activePackage == null
+                            ? '选择一个服务包后，可以先把需求记录在本地档案中。'
+                            : '当前选择：${activePackage.title}，适合 ${activePackage.audience}。',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          height: 1.7,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedPackageId,
+                        decoration: const InputDecoration(labelText: '服务类型'),
+                        items: widget.content.servicePackages
+                            .map(
+                              (item) => DropdownMenuItem<String>(
+                                value: item.id,
+                                child: Text(item.title),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedPackageId = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedBudget,
+                        decoration: const InputDecoration(labelText: '预算范围'),
+                        items: _budgetOptions
+                            .map(
+                              (item) => DropdownMenuItem<String>(
+                                value: item,
+                                child: Text(item),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedBudget = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _contactController,
+                        decoration: const InputDecoration(
+                          labelText: '联系人',
+                          hintText: '可留姓名或岗位',
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _organizationController,
+                        decoration: const InputDecoration(
+                          labelText: '机构 / 品牌',
+                          hintText: '例如：博物馆、学校、文旅项目方',
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _messageController,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: '需求说明',
+                          hintText: '填写目标场景、时间节点、交付预期等',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _saveInquiry(activePackage),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: const Text(
+                            '保存到本地需求档案',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.inquiries.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  const Text(
+                    '已登记需求',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...widget.inquiries.reversed
+                      .take(3)
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.packageTitle,
+                                  style: const TextStyle(
+                                    color: AppColors.accent,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${item.organization.isEmpty ? '未填写机构' : item.organization} · ${item.budget}',
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  item.message,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
+                                    height: 1.7,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                ],
+                const SizedBox(height: 20),
+                const Text(
+                  '常见问题',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...widget.content.faqs.map(
+                  (item) => Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: ExpansionTile(
+                      collapsedIconColor: AppColors.textSecondary,
+                      iconColor: AppColors.accent,
+                      title: Text(
+                        item.question,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Text(
+                            item.answer,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              height: 1.7,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _saveInquiry(ServicePackage? activePackage) {
+    if (activePackage == null || _messageController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先选择服务包并填写需求说明')));
+      return;
+    }
+
+    widget.onSubmitInquiry(
+      ServiceInquiry(
+        packageId: activePackage.id,
+        packageTitle: activePackage.title,
+        contactName: _contactController.text.trim(),
+        organization: _organizationController.text.trim(),
+        budget: _selectedBudget,
+        message: _messageController.text.trim(),
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    _contactController.clear();
+    _organizationController.clear();
+    _messageController.clear();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('需求已保存到本地档案，可继续补充和演示')));
+  }
+}
+
+class _ServiceMetricPill extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ServiceMetricPill({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$value  ',
+              style: const TextStyle(
+                color: AppColors.accent,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            TextSpan(
+              text: label,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ServicePackageCard extends StatelessWidget {
+  final ServicePackage item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ServicePackageCard({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected ? AppColors.accent : Colors.white10,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(Icons.check_circle, color: AppColors.accent),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '适合对象：${item.audience}',
+                style: const TextStyle(color: AppColors.accent, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.summary,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.7,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: item.deliverables
+                    .map(
+                      (deliverable) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withAlphaValue(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          deliverable,
+                          style: const TextStyle(
+                            color: AppColors.accent,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '预算参考：${item.priceBand}  ·  交付周期：${item.turnaround}',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MasterProfileCard extends StatelessWidget {
+  final MasterProfile profile;
+
+  const _MasterProfileCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withAlphaValue(0.14),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.person_outline, color: AppColors.accent),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            profile.name,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            profile.title,
+            style: const TextStyle(color: AppColors.accent, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            profile.specialty,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+          ),
+          const Spacer(),
+          Text(
+            '“${profile.quote}”',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.7,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineCard extends StatelessWidget {
+  final TimelineMilestone item;
+
+  const _TimelineCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            item.year,
+            style: const TextStyle(
+              color: AppColors.accent,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.summary,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.7,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class AssetArtwork extends StatelessWidget {
   final String path;
   final BoxFit fit;
 
-  const AssetArtwork({
-    super.key,
-    required this.path,
-    this.fit = BoxFit.cover,
-  });
+  const AssetArtwork({super.key, required this.path, this.fit = BoxFit.cover});
 
   @override
   Widget build(BuildContext context) {
@@ -1592,9 +2675,7 @@ class _BootstrapErrorView extends StatelessWidget {
 class _IntroCard extends StatelessWidget {
   final IntroPageData page;
 
-  const _IntroCard({
-    required this.page,
-  });
+  const _IntroCard({required this.page});
 
   @override
   Widget build(BuildContext context) {
@@ -1617,9 +2698,12 @@ class _IntroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withOpacity(0.12),
+                  color: AppColors.accent.withAlphaValue(0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
@@ -1671,10 +2755,7 @@ class _DetailMetaRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DetailMetaRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailMetaRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1694,10 +2775,7 @@ class _DetailMetaRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
           ),
         ),
       ],
@@ -1709,10 +2787,7 @@ class _CircleAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _CircleAction({
-    required this.icon,
-    required this.onTap,
-  });
+  const _CircleAction({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1756,7 +2831,7 @@ class _ProcessCard extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.surface.withOpacity(0.92),
+              color: AppColors.surface.withAlphaValue(0.92),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Colors.white10),
             ),
@@ -1768,7 +2843,7 @@ class _ProcessCard extends StatelessWidget {
                   height: 44,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.15),
+                    color: AppColors.accent.withAlphaValue(0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
@@ -1807,9 +2882,7 @@ class _ProcessCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Icon(
                   isLearned ? Icons.check_circle : Icons.north_east,
-                  color: isLearned
-                      ? AppColors.accent
-                      : AppColors.textSecondary,
+                  color: isLearned ? AppColors.accent : AppColors.textSecondary,
                   size: 18,
                 ),
               ],
@@ -1824,9 +2897,7 @@ class _ProcessCard extends StatelessWidget {
 class _AnimatedPreview extends StatefulWidget {
   final int index;
 
-  const _AnimatedPreview({
-    required this.index,
-  });
+  const _AnimatedPreview({required this.index});
 
   @override
   State<_AnimatedPreview> createState() => _AnimatedPreviewState();
@@ -1876,7 +2947,7 @@ class _AnimatedPreviewState extends State<_AnimatedPreview>
                   bottom: 18,
                   child: Container(
                     width: 2,
-                    color: AppColors.accent.withOpacity(0.45),
+                    color: AppColors.accent.withAlphaValue(0.45),
                   ),
                 ),
                 Positioned(
@@ -1947,7 +3018,7 @@ class _BackdropPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final linePaint = Paint()
-      ..color = AppColors.accent.withOpacity(0.06)
+      ..color = AppColors.accent.withAlphaValue(0.06)
       ..strokeWidth = 1;
 
     for (double i = -size.height; i < size.width + size.height; i += 28) {
@@ -1969,7 +3040,7 @@ class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.accent.withOpacity(0.05)
+      ..color = AppColors.accent.withAlphaValue(0.05)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 

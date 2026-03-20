@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'main.dart';
+import 'app_models.dart';
+import 'app_theme.dart';
 
 enum CarvingMode {
   rough('粗雕', Icons.handyman_outlined, 7.5, 5.2),
@@ -29,52 +30,39 @@ enum Difficulty {
   const Difficulty(this.label, this.widthFactor);
 }
 
-class Achievement {
+class _AchievementDefinition {
   final String title;
   final String description;
   final IconData icon;
-  bool isUnlocked;
+  final bool Function(List<CarvingRecord> history) isUnlocked;
 
-  Achievement({
+  const _AchievementDefinition({
     required this.title,
     required this.description,
     required this.icon,
-    this.isUnlocked = false,
+    required this.isUnlocked,
   });
 }
 
-class CarvingRecord {
-  final CarvingMode mode;
-  final Difficulty difficulty;
-  final DateTime timestamp;
-  final int strokeCount;
+class _WorkDraft {
+  final String title;
+  final String note;
 
-  const CarvingRecord({
-    required this.mode,
-    required this.difficulty,
-    required this.timestamp,
-    required this.strokeCount,
-  });
+  const _WorkDraft({required this.title, required this.note});
 }
 
 class CarvingPoint {
   final Offset position;
   final double width;
 
-  const CarvingPoint({
-    required this.position,
-    required this.width,
-  });
+  const CarvingPoint({required this.position, required this.width});
 }
 
 class CarvingStroke {
   final List<CarvingPoint> points;
   final CarvingMode mode;
 
-  const CarvingStroke({
-    required this.points,
-    required this.mode,
-  });
+  const CarvingStroke({required this.points, required this.mode});
 }
 
 class WoodParticle {
@@ -90,7 +78,14 @@ class WoodParticle {
 }
 
 class InteractionScreen extends StatefulWidget {
-  const InteractionScreen({super.key});
+  final List<CarvingRecord> initialHistory;
+  final ValueChanged<List<CarvingRecord>> onHistoryChanged;
+
+  const InteractionScreen({
+    super.key,
+    required this.initialHistory,
+    required this.onHistoryChanged,
+  });
 
   @override
   State<InteractionScreen> createState() => _InteractionScreenState();
@@ -102,18 +97,74 @@ class _InteractionScreenState extends State<InteractionScreen> {
 
   final List<CarvingStroke> _strokes = [];
   final List<WoodParticle> _particles = [];
-  final List<CarvingRecord> _history = [];
-  final List<Achievement> _achievements = [
-    Achievement(title: '初试牛刀', description: '完成第一次雕刻体验', icon: Icons.star_rounded),
-    Achievement(title: '渐入佳境', description: '累计完成 3 次雕刻', icon: Icons.auto_awesome),
-    Achievement(title: '精益求精', description: '在精雕模式下完成作品', icon: Icons.workspace_premium_outlined),
-    Achievement(title: '挑战极限', description: '在困难模式下完成作品', icon: Icons.local_fire_department_outlined),
-    Achievement(title: '全能雕刻师', description: '尝试全部三种雕刻模式', icon: Icons.extension_outlined),
+  static const List<_AchievementDefinition> _achievements = [
+    _AchievementDefinition(
+      title: '初试牛刀',
+      description: '完成第一次雕刻体验',
+      icon: Icons.star_rounded,
+      isUnlocked: _unlockFirstSession,
+    ),
+    _AchievementDefinition(
+      title: '渐入佳境',
+      description: '累计完成 3 次雕刻归档',
+      icon: Icons.auto_awesome,
+      isUnlocked: _unlockThreeSessions,
+    ),
+    _AchievementDefinition(
+      title: '精益求精',
+      description: '在精雕模式下完成作品',
+      icon: Icons.workspace_premium_outlined,
+      isUnlocked: _unlockFineMode,
+    ),
+    _AchievementDefinition(
+      title: '挑战极限',
+      description: '在困难模式下完成作品',
+      icon: Icons.local_fire_department_outlined,
+      isUnlocked: _unlockHardMode,
+    ),
+    _AchievementDefinition(
+      title: '全能雕刻师',
+      description: '尝试全部三种雕刻模式',
+      icon: Icons.extension_outlined,
+      isUnlocked: _unlockAllModes,
+    ),
   ];
+
+  late List<CarvingRecord> _history;
 
   List<CarvingPoint> _currentPoints = [];
   bool _isCurrentWorkSaved = false;
   int _lastHapticTick = 0;
+
+  static bool _unlockFirstSession(List<CarvingRecord> history) =>
+      history.isNotEmpty;
+
+  static bool _unlockThreeSessions(List<CarvingRecord> history) =>
+      history.length >= 3;
+
+  static bool _unlockFineMode(List<CarvingRecord> history) =>
+      history.any((item) => item.modeId == CarvingMode.fine.name);
+
+  static bool _unlockHardMode(List<CarvingRecord> history) =>
+      history.any((item) => item.difficultyId == Difficulty.hard.name);
+
+  static bool _unlockAllModes(List<CarvingRecord> history) =>
+      history.map((item) => item.modeId).toSet().length ==
+      CarvingMode.values.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _history = List<CarvingRecord>.from(widget.initialHistory);
+  }
+
+  @override
+  void didUpdateWidget(covariant InteractionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialHistory != widget.initialHistory) {
+      _history = List<CarvingRecord>.from(widget.initialHistory);
+    }
+  }
 
   int get _strokeCount => _strokes.length + (_currentPoints.length > 1 ? 1 : 0);
 
@@ -144,6 +195,28 @@ class _InteractionScreenState extends State<InteractionScreen> {
     }
   }
 
+  int get _unlockedAchievementCount =>
+      _achievements.where((item) => item.isUnlocked(_history)).length;
+
+  CarvingRecord? get _latestRecord => _history.isEmpty ? null : _history.last;
+
+  String get _studioChallenge {
+    if (_history.isEmpty) {
+      return '完成第一件作品归档，解锁你的数字工坊档案。';
+    }
+    if (!_history.any((item) => item.modeId == CarvingMode.fine.name)) {
+      return '下一步建议：切换到精雕模式，完成一件细节导向的作品。';
+    }
+    if (!_history.any((item) => item.difficultyId == Difficulty.hard.name)) {
+      return '下一步建议：挑战困难模式，训练更细密的刻痕控制。';
+    }
+    if (_history.map((item) => item.modeId).toSet().length <
+        CarvingMode.values.length) {
+      return '下一步建议：把三种模式都体验一遍，补齐成就墙。';
+    }
+    return '你已经完成基础挑战，建议继续积累作品档案用于课程展示或商业演示。';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,12 +225,12 @@ class _InteractionScreenState extends State<InteractionScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
-            tooltip: '历史记录',
+            tooltip: '作品档案',
             onPressed: _showHistory,
           ),
           IconButton(
             icon: const Icon(Icons.emoji_events_outlined),
-            tooltip: '成就',
+            tooltip: '成就墙',
             onPressed: _showAchievements,
           ),
         ],
@@ -179,9 +252,9 @@ class _InteractionScreenState extends State<InteractionScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                '通过手势轨迹与细微触感反馈，模拟榄雕从开坯到精修的过程。',
+                '通过手势轨迹、作品归档与创作挑战，模拟榄雕从开坯到精修的完整体验闭环。',
                 style: TextStyle(
-                  color: AppColors.textSecondary.withOpacity(0.92),
+                  color: AppColors.textSecondary.withAlphaValue(0.92),
                   fontSize: 14,
                   height: 1.8,
                 ),
@@ -192,6 +265,89 @@ class _InteractionScreenState extends State<InteractionScreen> {
                 progressText: '${(_progress * 100).toInt()}%',
                 strokeCount: _strokeCount,
                 hint: _craftHint,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StudioMetricCard(
+                      label: '归档作品',
+                      value: '${_history.length}',
+                      hint: '可跨会话保存',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StudioMetricCard(
+                      label: '解锁成就',
+                      value: '$_unlockedAchievementCount',
+                      hint: '成长看得见',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StudioMetricCard(
+                      label: '最高笔数',
+                      value: _history.isEmpty
+                          ? '--'
+                          : '${_history.map((item) => item.strokeCount).reduce(math.max)}',
+                      hint: '当前档案峰值',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSoft,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withAlphaValue(0.14),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.flag_outlined,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '今日工坊建议',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _studioChallenge,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              height: 1.7,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 18),
               _SectionTitle(title: '雕刻模式'),
@@ -267,8 +423,10 @@ class _InteractionScreenState extends State<InteractionScreen> {
                               constraints.maxHeight,
                             );
                             return GestureDetector(
-                              onPanStart: (details) => _beginStroke(details.localPosition, size),
-                              onPanUpdate: (details) => _appendPoint(details.localPosition, size),
+                              onPanStart: (details) =>
+                                  _beginStroke(details.localPosition, size),
+                              onPanUpdate: (details) =>
+                                  _appendPoint(details.localPosition, size),
                               onPanEnd: (_) => _endStroke(),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(24),
@@ -277,7 +435,10 @@ class _InteractionScreenState extends State<InteractionScreen> {
                                     gradient: LinearGradient(
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
-                                      colors: [Color(0xFF211811), Color(0xFF0F0F0F)],
+                                      colors: [
+                                        Color(0xFF211811),
+                                        Color(0xFF0F0F0F),
+                                      ],
                                     ),
                                   ),
                                   child: CustomPaint(
@@ -291,16 +452,22 @@ class _InteractionScreenState extends State<InteractionScreen> {
                                       child: IgnorePointer(
                                         child: AnimatedOpacity(
                                           opacity: _strokeCount > 0 ? 0.0 : 1.0,
-                                          duration: const Duration(milliseconds: 250),
+                                          duration: const Duration(
+                                            milliseconds: 250,
+                                          ),
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 18,
                                               vertical: 12,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.36),
-                                              borderRadius: BorderRadius.circular(999),
-                                              border: Border.all(color: Colors.white10),
+                                              color: Colors.black
+                                                  .withAlphaValue(0.36),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: Colors.white10,
+                                              ),
                                             ),
                                             child: const Text(
                                               '拖动手指开始雕刻',
@@ -339,15 +506,21 @@ class _InteractionScreenState extends State<InteractionScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _progress >= 1 && !_isCurrentWorkSaved ? _saveWork : null,
-                            icon: const Icon(Icons.save_outlined, color: Colors.black),
+                            onPressed: _progress >= 1 && !_isCurrentWorkSaved
+                                ? _saveWork
+                                : null,
+                            icon: const Icon(
+                              Icons.inventory_2_outlined,
+                              color: Colors.black,
+                            ),
                             label: Text(
-                              _isCurrentWorkSaved ? '已保存' : '保存作品',
+                              _isCurrentWorkSaved ? '已归档' : '归档作品',
                               style: const TextStyle(color: Colors.black),
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.accent,
-                              disabledBackgroundColor: AppColors.accent.withOpacity(0.35),
+                              disabledBackgroundColor: AppColors.accent
+                                  .withAlphaValue(0.35),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),
@@ -357,6 +530,59 @@ class _InteractionScreenState extends State<InteractionScreen> {
                   ],
                 ),
               ),
+              if (_latestRecord != null) ...[
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '最近归档作品',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _latestRecord!.title,
+                        style: const TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${_latestRecord!.modeLabel} · ${_latestRecord!.difficultyLabel} · ${_latestRecord!.strokeCount} 笔',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (_latestRecord!.note.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _latestRecord!.note,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            height: 1.7,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               Container(
                 width: double.infinity,
@@ -378,7 +604,7 @@ class _InteractionScreenState extends State<InteractionScreen> {
                     ),
                     SizedBox(height: 10),
                     Text(
-                      '1. 在榄核区域内拖动手指或鼠标，生成刻痕。\n2. 不同模式会改变笔触的粗细与节奏感。\n3. 当完成度达到 100% 时即可保存到本地历史记录。',
+                      '1. 在榄核区域内拖动手指或鼠标，生成刻痕。\n2. 不同模式会改变笔触的粗细与节奏感。\n3. 进度达到 100% 后，建议为作品命名并归档，积累可复用的展示素材。',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 14,
@@ -441,7 +667,12 @@ class _InteractionScreenState extends State<InteractionScreen> {
     }
 
     setState(() {
-      _strokes.add(CarvingStroke(points: List<CarvingPoint>.from(_currentPoints), mode: _selectedMode));
+      _strokes.add(
+        CarvingStroke(
+          points: List<CarvingPoint>.from(_currentPoints),
+          mode: _selectedMode,
+        ),
+      );
       _currentPoints = [];
       if (_progress >= 1) {
         HapticFeedback.mediumImpact();
@@ -466,7 +697,8 @@ class _InteractionScreenState extends State<InteractionScreen> {
     for (int i = 0; i < 3; i++) {
       _particles.add(
         WoodParticle(
-          position: position +
+          position:
+              position +
               Offset(
                 random.nextDouble() * 18 - 9,
                 random.nextDouble() * 18 - 9,
@@ -492,48 +724,109 @@ class _InteractionScreenState extends State<InteractionScreen> {
     });
   }
 
-  void _saveWork() {
+  Future<void> _saveWork() async {
     if (_progress < 1 || _isCurrentWorkSaved) {
       return;
     }
+
+    final draft = await _showSaveDraftDialog();
+    if (!mounted || draft == null) {
+      return;
+    }
+
+    final nextHistory = [
+      ..._history,
+      CarvingRecord(
+        title: draft.title,
+        note: draft.note,
+        modeId: _selectedMode.name,
+        modeLabel: _selectedMode.label,
+        difficultyId: _selectedDifficulty.name,
+        difficultyLabel: _selectedDifficulty.label,
+        timestamp: DateTime.now(),
+        strokeCount: _strokeCount,
+      ),
+    ];
+
     setState(() {
-      _history.add(
-        CarvingRecord(
-          mode: _selectedMode,
-          difficulty: _selectedDifficulty,
-          timestamp: DateTime.now(),
-          strokeCount: _strokeCount,
-        ),
-      );
+      _history = nextHistory;
       _isCurrentWorkSaved = true;
-      _unlockAchievements();
     });
+
+    widget.onHistoryChanged(nextHistory);
     HapticFeedback.heavyImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('本次雕刻体验已保存到历史记录'),
+        content: Text('《${draft.title}》已归档到本地作品档案'),
         backgroundColor: AppColors.accent,
       ),
     );
   }
 
-  void _unlockAchievements() {
-    if (_history.isNotEmpty) {
-      _achievements[0].isUnlocked = true;
-    }
-    if (_history.length >= 3) {
-      _achievements[1].isUnlocked = true;
-    }
-    if (_history.any((item) => item.mode == CarvingMode.fine)) {
-      _achievements[2].isUnlocked = true;
-    }
-    if (_history.any((item) => item.difficulty == Difficulty.hard)) {
-      _achievements[3].isUnlocked = true;
-    }
-    final usedModes = _history.map((item) => item.mode).toSet();
-    if (usedModes.length == CarvingMode.values.length) {
-      _achievements[4].isUnlocked = true;
-    }
+  Future<_WorkDraft?> _showSaveDraftDialog() {
+    final titleController = TextEditingController(
+      text: '${_selectedMode.label}·第${_history.length + 1}件',
+    );
+    final noteController = TextEditingController();
+
+    return showDialog<_WorkDraft>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('归档作品'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: '作品名称',
+                    hintText: '例如：松风入核',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: noteController,
+                  maxLines: 3,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: '创作备注',
+                    hintText: '记录本次练习重点、灵感或展示用途',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(
+                  _WorkDraft(
+                    title: titleController.text.trim().isEmpty
+                        ? '未命名作品'
+                        : titleController.text.trim(),
+                    note: noteController.text.trim(),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showHistory() {
@@ -542,11 +835,11 @@ class _InteractionScreenState extends State<InteractionScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('雕刻历史'),
+          title: const Text('作品档案'),
           content: SizedBox(
             width: double.maxFinite,
             child: _history.isEmpty
-                ? const Text('还没有保存过作品，可以先完成一次雕刻体验。')
+                ? const Text('还没有归档作品，可以先完成一次雕刻体验。')
                 : ListView.builder(
                     shrinkWrap: true,
                     itemCount: _history.length,
@@ -554,10 +847,19 @@ class _InteractionScreenState extends State<InteractionScreen> {
                       final item = _history[_history.length - index - 1];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(item.mode.icon, color: AppColors.accent),
-                        title: Text('${item.mode.label} · ${item.difficulty.label}'),
+                        leading: Icon(
+                          _modeFromId(item.modeId).icon,
+                          color: AppColors.accent,
+                        ),
+                        title: Text(item.title),
                         subtitle: Text(
-                          '${_formatTimestamp(item.timestamp)} · ${item.strokeCount} 笔',
+                          '${item.modeLabel} · ${item.difficultyLabel} · ${_formatTimestamp(item.timestamp)}',
+                        ),
+                        trailing: Text(
+                          '${item.strokeCount} 笔',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       );
                     },
@@ -580,7 +882,7 @@ class _InteractionScreenState extends State<InteractionScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('成就系统'),
+          title: const Text('成就墙'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -588,22 +890,23 @@ class _InteractionScreenState extends State<InteractionScreen> {
               itemCount: _achievements.length,
               itemBuilder: (context, index) {
                 final item = _achievements[index];
+                final unlocked = item.isUnlocked(_history);
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
                     item.icon,
-                    color: item.isUnlocked ? AppColors.accent : Colors.white24,
+                    color: unlocked ? AppColors.accent : Colors.white24,
                   ),
                   title: Text(
                     item.title,
                     style: TextStyle(
-                      color: item.isUnlocked ? AppColors.textPrimary : Colors.white38,
+                      color: unlocked ? AppColors.textPrimary : Colors.white38,
                     ),
                   ),
                   subtitle: Text(item.description),
                   trailing: Icon(
-                    item.isUnlocked ? Icons.check_circle : Icons.lock_outline,
-                    color: item.isUnlocked ? AppColors.accent : Colors.white24,
+                    unlocked ? Icons.check_circle : Icons.lock_outline,
+                    color: unlocked ? AppColors.accent : Colors.white24,
                   ),
                 );
               },
@@ -617,6 +920,13 @@ class _InteractionScreenState extends State<InteractionScreen> {
           ],
         );
       },
+    );
+  }
+
+  CarvingMode _modeFromId(String id) {
+    return CarvingMode.values.firstWhere(
+      (item) => item.name == id,
+      orElse: () => CarvingMode.rough,
     );
   }
 
@@ -690,10 +1000,7 @@ class _StatusPanel extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             '当前累计刻痕：$strokeCount 笔',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
           ),
           const SizedBox(height: 8),
           Text(
@@ -702,6 +1009,59 @@ class _StatusPanel extends StatelessWidget {
               color: AppColors.textSecondary,
               fontSize: 13,
               height: 1.7,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudioMetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String hint;
+
+  const _StudioMetricCard({
+    required this.label,
+    required this.value,
+    required this.hint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.accent,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hint,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
             ),
           ),
         ],
@@ -814,7 +1174,7 @@ class _CarvingBoardPainter extends CustomPainter {
     canvas.drawOval(oliveRect, backdropPaint);
 
     final texturePaint = Paint()
-      ..color = const Color(0xFF8B6542).withOpacity(0.08)
+      ..color = const Color(0xFF8B6542).withAlphaValue(0.08)
       ..strokeWidth = 1;
     for (double y = oliveRect.top + 18; y < oliveRect.bottom - 18; y += 18) {
       final inset = (y - oliveRect.center.dy).abs() * 0.18;
@@ -839,17 +1199,19 @@ class _CarvingBoardPainter extends CustomPainter {
 
     final particlePaint = Paint()..style = PaintingStyle.fill;
     for (final particle in particles) {
-      particlePaint.color = const Color(0xFFC79B68).withOpacity(particle.opacity);
+      particlePaint.color = const Color(
+        0xFFC79B68,
+      ).withAlphaValue(particle.opacity);
       canvas.drawCircle(particle.position, particle.radius, particlePaint);
     }
 
     final glowPaint = Paint()
-      ..color = AppColors.accent.withOpacity(0.08 + progress * 0.12)
+      ..color = AppColors.accent.withAlphaValue(0.08 + progress * 0.12)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
     canvas.drawOval(oliveRect.inflate(8), glowPaint);
 
     final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
+      ..color = Colors.white.withAlphaValue(0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawOval(oliveRect, borderPaint);

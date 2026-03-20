@@ -1,4 +1,4 @@
-package com.example.olive_carving
+package com.olivestudio.olivecarving
 
 import io.flutter.embedding.android.FlutterActivity
 

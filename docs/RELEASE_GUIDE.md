@@ -97,30 +97,31 @@ version: 1.0.1+2
 
 ## 当前签名说明
 
-目前 `android/app/build.gradle.kts` 中的 release 仍然使用默认 debug signing：
+目前 `android/app/build.gradle.kts` 已经支持：
 
-```kotlin
-release {
-    signingConfig = signingConfigs.getByName("debug")
-}
+- 如果存在 `android/key.properties`，则使用正式 keystore 签名
+- 如果不存在 `android/key.properties`，则回退为 debug signing，方便继续演示构建
+
+你可以先复制模板文件：
+
+```bash
+cp android/key.properties.example android/key.properties
 ```
 
 这意味着：
 
-- 可以正常生成 release APK
-- 可以正常下载安装
-- 不适合正式商店发布
-- 后期如果更换正式签名，旧版本可能无法直接覆盖安装
+- 项目默认仍能正常生成 release APK
+- 在未配置正式 keystore 前，输出包依然只适合演示和测试
+- 想要正式商店发布，必须补齐自己的 keystore 与密码配置
 
 ## 如果后续要接入正式签名
 
 建议流程：
 
 1. 生成自己的 keystore
-2. 在本地保存密钥信息，不要上传到仓库
-3. 使用 `key.properties` 或环境变量配置签名
-4. 修改 `android/app/build.gradle.kts`
-5. 重新生成 APK 或 AAB
+2. 复制 `android/key.properties.example` 为 `android/key.properties`
+3. 在本地填写真实密钥信息，不要上传到仓库
+4. 重新生成 APK 或 AAB
 
 ## 什么时候用 APK，什么时候用 AAB
 
@@ -161,4 +162,3 @@ release {
 ### 3. 安装时提示签名问题
 
 通常是因为本机已安装了使用不同签名的同包名应用。可以先卸载旧版本，再安装新 APK。
-

@@ -7,14 +7,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:olive_carving/backend_gateway.dart';
 import 'package:olive_carving/main.dart';
 
 void main() {
   testWidgets('App boots into splash screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const OliveApp());
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(
+      const OliveApp(
+        backendConfig: BackendConfig(supabaseUrl: '', supabaseAnonKey: ''),
+      ),
+    );
 
     expect(find.text('榄雕云艺'), findsOneWidget);
     expect(find.byType(MaterialApp), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1900));
   });
 }

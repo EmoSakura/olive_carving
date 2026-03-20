@@ -1,0 +1,4 @@
+storeFile=../keystore/release-keystore.jks
+storePassword=replace-with-your-store-password
+keyAlias=olive_carving
+keyPassword=replace-with-your-key-password
