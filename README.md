@@ -6,7 +6,7 @@
 [https://github.com/EmoSakura/olive_carving](https://github.com/EmoSakura/olive_carving)
 
 APK 下载：
-[https://github.com/EmoSakura/olive_carving/releases/tag/v1.0.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.0.0)
+[https://github.com/EmoSakura/olive_carving/releases/tag/v1.2.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.2.0)
 
 ## 项目概览
 
