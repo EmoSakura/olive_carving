@@ -10,9 +10,9 @@
 - 公开 Release 页面
 - GitHub Actions 自动构建工作流
 
-当前首个 Release：
+当前最新 Release：
 
-[https://github.com/EmoSakura/olive_carving/releases/tag/v1.2.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.2.0)
+[https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0)
 
 ## 本地构建 APK
 

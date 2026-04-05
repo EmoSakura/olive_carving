@@ -143,7 +143,7 @@
       "technique": "圆雕、镂空雕",
       "description": "取材于苏东坡夜游赤壁，核舟虽小，五官清晰可见，窗户可开合，体现了榄雕在空间层次与人物动态上的极高掌控力。",
       "story": "作品借助乌榄天然长核的轮廓，以舟为骨，以人物叙事为魂。观者在放大细看时，往往会被窗棂、衣纹与人物神态的细密刻画打动。",
-      "image": "assets/images/东坡夜游.jfif"
+      "image": "assets/images/dongpo_night_tour.png"
     },
     {
       "id": "exhibit_2",
@@ -154,7 +154,7 @@
       "technique": "浮雕、圆雕",
       "description": "在方寸橄榄核上雕刻百位童子，寓意多子多福，场景饱满而不杂乱，层层推进。",
       "story": "这类题材常以群像见功力。真正打动人的不是数量本身，而是在极小尺度内依然保留了动作与表情的差异性。",
-      "image": "assets/images/百子图.jpg"
+      "image": "assets/images/hundred_children.png"
     },
     {
       "id": "exhibit_3",
@@ -165,7 +165,7 @@
       "technique": "圆雕、镂空雕",
       "description": "利用榄核天然起伏造型，雕出十八罗汉的不同神态，层次清晰，气韵生动。",
       "story": "榄雕对人物面部的处理极考验刀法与耐心。放大后可见须眉、衣褶、坐姿关系都被压缩在极小的空间中。",
-      "image": "assets/images/十八罗汉.webp"
+      "image": "assets/images/eighteen_arhats.png"
     },
     {
       "id": "exhibit_4",
@@ -176,7 +176,7 @@
       "technique": "镂空雕、浮雕",
       "description": "以松石、人物、棋局构成文人雅集图景，画面宁静，结构疏密得当。",
       "story": "山水类榄雕重在气韵和层次。创作者会借榄核自然弧面组织前后景关系，让观者在转动视角时感受到空间流动。",
-      "image": "assets/images/松下对弈.webp"
+      "image": "assets/images/pine_chess.png"
     },
     {
       "id": "exhibit_5",
@@ -187,7 +187,7 @@
       "technique": "圆雕、镂空雕",
       "description": "九条神龙盘旋呼应，构图紧凑有力，体现了榄雕在动势组织上的独特张力。",
       "story": "这类作品常通过穿插和镂空制造呼吸感，避免高密度构图带来的板滞。每一条龙的转折，都需要对材料厚薄十分敏感。",
-      "image": "assets/images/九龙戏珠.webp"
+      "image": "assets/images/nine_dragons.png"
     },
     {
       "id": "exhibit_6",
@@ -198,7 +198,7 @@
       "technique": "圆雕、浮雕",
       "description": "八仙各显神通，人物组合丰富，叙事感极强，是传统题材在榄雕中的代表之一。",
       "story": "多人物叙事题材需要在有限的核面上精准安排主次关系，这也是榄雕观看时最容易产生惊叹的部分。",
-      "image": "assets/images/八仙过海.jfif"
+      "image": "assets/images/eight_immortals.png"
     },
     {
       "id": "exhibit_7",
@@ -209,7 +209,7 @@
       "technique": "浮雕",
       "description": "以梅兰竹菊四组意象呈现文人审美，构图简雅，讲究留白与节奏。",
       "story": "相比满工式作品，花鸟题材更强调意境。榄雕并不只追求复杂，也可以在克制与空灵中见功力。",
-      "image": "assets/images/花鸟四屏.webp"
+      "image": "assets/images/flowers_birds_screen.png"
     },
     {
       "id": "exhibit_8",
@@ -220,7 +220,7 @@
       "technique": "浮雕、镂空雕",
       "description": "将楼阁、山水、人物压缩在一枚榄核上，层层递进，像一卷立体展开的山水小景。",
       "story": "观看这类作品时，最适合通过局部放大去看亭台边角、树石层理与人物比例，能更直观体会“毫厘之间见大千”的精妙。",
-      "image": "assets/images/山水楼阁.jfif"
+      "image": "assets/images/landscape_pavilion.png"
     }
   ],
   "craftSteps": [

@@ -10,8 +10,11 @@ import 'auth_screen.dart';
 import 'backend_gateway.dart';
 import 'content_repository.dart';
 import 'admin_screen.dart';
+import 'export_support.dart';
+import 'canvas_project_models.dart';
 import 'home_screen.dart';
 import 'interaction_screen.dart';
+import 'process_experience_screen.dart';
 import 'product_models.dart';
 import 'user_state_repository.dart';
 
@@ -510,11 +513,68 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _persistUserState();
   }
 
+  void _updateCanvasDraft(CanvasProjectDraft draft) {
+    setState(() {
+      _userState = _userState.copyWith(canvasDraft: draft);
+    });
+    _persistUserState();
+  }
+
+  void _submitServiceInquiry(ServiceInquiry inquiry) {
+    final nextInquiries = List<ServiceInquiry>.from(_userState.serviceInquiries)
+      ..add(inquiry);
+    setState(() {
+      _userState = _userState.copyWith(serviceInquiries: nextInquiries);
+    });
+    _persistUserState();
+  }
+
+  void _updateServiceInquiry(ServiceInquiry inquiry) {
+    final nextInquiries = _userState.serviceInquiries
+        .map((item) => item.id == inquiry.id ? inquiry : item)
+        .toList();
+    setState(() {
+      _userState = _userState.copyWith(serviceInquiries: nextInquiries);
+    });
+    _persistUserState();
+  }
+
   void _updateManagedExhibit(ManagedExhibitState nextState) {
     setState(() {
       _adminWorkspace = _adminWorkspace.update(nextState);
     });
     _persistAdminWorkspace();
+  }
+
+  Future<void> _openAdminScreen() async {
+    if (widget.session.role != UserRole.admin) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          body: AdminScreen(
+            workspace: _adminWorkspace,
+            exhibits: widget.content.exhibits,
+            inquiries: _userState.serviceInquiries,
+            onUpdateExhibitState: _updateManagedExhibit,
+            onUpdateInquiry: _updateServiceInquiry,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openExportFromPortfolio(String path) async {
+    final opened = await openSavedExport(path);
+    if (!mounted) {
+      return;
+    }
+    if (!opened) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前环境无法直接打开导出文件')));
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -574,34 +634,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         selectedIcon: Icon(Icons.gesture),
         label: '指尖互动',
       ),
+      const NavigationDestination(
+        icon: Icon(Icons.collections_bookmark_outlined),
+        selectedIcon: Icon(Icons.collections_bookmark),
+        label: '作品集',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.workspaces_outline),
+        selectedIcon: Icon(Icons.workspaces),
+        label: '服务中心',
+      ),
     ];
-    if (widget.session.role == UserRole.admin) {
-      destinations.add(
-        const NavigationDestination(
-          icon: Icon(Icons.admin_panel_settings_outlined),
-          selectedIcon: Icon(Icons.admin_panel_settings),
-          label: '后台',
-        ),
-      );
-    }
     final pages = [
       HomeScreen(
         session: widget.session,
         content: widget.content,
         userState: _userState,
         adminWorkspace: _adminWorkspace,
+        isRemoteBackend: widget.backendGateway.isRemote,
         onOpenGallery: () => setState(() => _currentIndex = 1),
         onOpenProcess: () => setState(() => _currentIndex = 2),
         onOpenInteraction: () => setState(() => _currentIndex = 3),
-        onOpenAdmin: () {
-          if (widget.session.role == UserRole.admin) {
-            setState(() => _currentIndex = 4);
-          }
-        },
+        onOpenService: () => setState(() => _currentIndex = 5),
+        onOpenAdmin: _openAdminScreen,
         onLogout: _handleLogout,
       ),
       GalleryScreen(
-        featuredCollections: const <FeaturedCollection>[],
+        featuredCollections: widget.content.featuredCollections,
         exhibits: visibleExhibits,
         favoriteExhibitIds: _userState.favoriteExhibitIds,
         recentExhibitIds: _userState.recentExhibitIds,
@@ -609,37 +668,147 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onToggleFavorite: _toggleFavoriteExhibit,
         onExhibitViewed: _registerExhibitViewed,
       ),
-      ProcessScreen(
+      ProcessExperienceScreen(
         steps: widget.content.craftSteps,
         learnedStepTitles: _userState.learnedStepTitles,
         onStepLearned: _markStepLearned,
       ),
       InteractionScreen(
         initialHistory: _userState.carvingHistory,
+        availableExhibits: widget.content.exhibits,
+        initialDraft: _userState.canvasDraft,
         onHistoryChanged: _updateCarvingHistory,
+        onDraftChanged: _updateCanvasDraft,
       ),
-      if (widget.session.role == UserRole.admin)
-        AdminScreen(
-          workspace: _adminWorkspace,
-          exhibits: widget.content.exhibits,
-          onUpdateExhibitState: _updateManagedExhibit,
-        ),
+      PortfolioGalleryScreen(
+        records: _userState.carvingHistory,
+        onOpenExport: _openExportFromPortfolio,
+      ),
+      ServiceHubScreen(
+        content: widget.content,
+        inquiries: _userState.serviceInquiries,
+        favoriteCount: _userState.favoriteExhibitIds.length,
+        archivedWorkCount: _userState.carvingHistory.length,
+        learnedStepCount: _userState.learnedStepTitles.length,
+        onSubmitInquiry: _submitServiceInquiry,
+      ),
     ];
 
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: pages),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: AppColors.surface,
-        selectedIndex: _currentIndex,
-        indicatorColor: AppColors.accent.withAlphaValue(0.18),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        destinations: destinations,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 1080) {
+          return Scaffold(
+            body: SafeArea(
+              child: Row(
+                children: [
+                  Container(
+                    width: constraints.maxWidth >= 1320 ? 220 : 96,
+                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      border: Border(right: BorderSide(color: Colors.white10)),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSoft,
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '榄雕云艺',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                constraints.maxWidth >= 1320
+                                    ? '策展内容 + 学习互动 + 服务转化'
+                                    : '数字传承',
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: NavigationRail(
+                            backgroundColor: Colors.transparent,
+                            extended: constraints.maxWidth >= 1320,
+                            selectedIndex: _currentIndex,
+                            indicatorColor: AppColors.accent.withAlphaValue(
+                              0.18,
+                            ),
+                            onDestinationSelected: (index) {
+                              setState(() {
+                                _currentIndex = index;
+                              });
+                            },
+                            destinations: destinations
+                                .map(
+                                  (item) => NavigationRailDestination(
+                                    icon: item.icon,
+                                    selectedIcon: item.selectedIcon,
+                                    label: Text(item.label),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                        if (widget.session.role == UserRole.admin)
+                          IconButton.filledTonal(
+                            onPressed: _openAdminScreen,
+                            icon: const Icon(
+                              Icons.admin_panel_settings_outlined,
+                            ),
+                            tooltip: '管理后台',
+                          ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      color: AppColors.background,
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: pages,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          body: IndexedStack(index: _currentIndex, children: pages),
+          bottomNavigationBar: NavigationBar(
+            backgroundColor: AppColors.surface,
+            selectedIndex: _currentIndex,
+            indicatorColor: AppColors.accent.withAlphaValue(0.18),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            destinations: destinations,
+          ),
+        );
+      },
     );
   }
 }
@@ -1615,6 +1784,69 @@ class _ProcessScreenState extends State<ProcessScreen> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0;
 
+  static const Map<String, _CraftStepSpec> _stepSpecs = {
+    '选核': _CraftStepSpec(
+      titleTag: 'Material Scan',
+      icon: Icons.grain_outlined,
+      accent: Color(0xFFD7B26D),
+      support: Color(0xFF7D5A34),
+      tools: ['核形筛选', '纹理观察', '厚薄判断'],
+      materials: ['乌榄核', '自然纹理', '油性与密度'],
+      checkpoints: ['核形是否立得住题材', '纹理是否顺着叙事方向', '是否存在裂纹和空心风险'],
+      mistakes: ['只看大小不看结构', '忽略天然纹路的走向', '为复杂题材选择过薄核料'],
+      deliverable: '产出一枚“能承题”的核料，并确定题材大方向。',
+      scene: _CraftPreviewScene.kernel,
+    ),
+    '构思': _CraftStepSpec(
+      titleTag: 'Narrative Layout',
+      icon: Icons.route_outlined,
+      accent: Color(0xFFE0C276),
+      support: Color(0xFF5B4630),
+      tools: ['构图草图', '题材压缩', '视觉主次'],
+      materials: ['故事原型', '核面弧度', '前后景关系'],
+      checkpoints: ['主视觉是否先被看见', '故事人物是否站得住', '核面转折是否被顺势利用'],
+      mistakes: ['把信息硬塞满', '只想局部不想整体动线', '忽视弧面转折导致画面发散'],
+      deliverable: '形成一套适合这枚核料的叙事草图和空间动线。',
+      scene: _CraftPreviewScene.composition,
+    ),
+    '粗雕': _CraftStepSpec(
+      titleTag: 'Structure Build',
+      icon: Icons.architecture_outlined,
+      accent: Color(0xFFCC9B58),
+      support: Color(0xFF4B3727),
+      tools: ['开坯刀法', '体块切分', '主从分层'],
+      materials: ['体块边界', '前后层次', '结构余量'],
+      checkpoints: ['大的体块关系是否成立', '关键支撑位是否保住', '是否给精雕留足余量'],
+      mistakes: ['过早削薄关键节点', '细节先行导致结构松散', '一味追求快感而失去层次'],
+      deliverable: '完成稳定结构和主从关系，进入可精修状态。',
+      scene: _CraftPreviewScene.blocking,
+    ),
+    '精雕': _CraftStepSpec(
+      titleTag: 'Detail Carve',
+      icon: Icons.auto_fix_high_outlined,
+      accent: Color(0xFFF0C97F),
+      support: Color(0xFF4A3322),
+      tools: ['线条控制', '细节压缩', '焦点强调'],
+      materials: ['人物眉眼', '衣纹窗棂', '山石层理'],
+      checkpoints: ['焦点是否比其余部分更清晰', '细节密度是否有节奏', '线条转折是否干净有力'],
+      mistakes: ['每个地方都一样重', '细节过满导致主次不分', '刀痕抖动破坏精致感'],
+      deliverable: '让人物神态、纹理和空间层次真正“活起来”。',
+      scene: _CraftPreviewScene.detail,
+    ),
+    '抛光': _CraftStepSpec(
+      titleTag: 'Finish & Glow',
+      icon: Icons.blur_on_outlined,
+      accent: Color(0xFFF3D89D),
+      support: Color(0xFF6C543B),
+      tools: ['细磨抛光', '表面统一', '光感校正'],
+      materials: ['边缘触感', '表面反光', '温润度'],
+      checkpoints: ['手感是否均匀', '表面反光是否顺', '作品是否从“雕刻物”变成“成品”'],
+      mistakes: ['只求亮不求层次', '把边角磨钝', '忽略保养后的最终光感'],
+      deliverable: '把刀痕收束成温润成品，进入展示与收藏状态。',
+      scene: _CraftPreviewScene.polish,
+    ),
+  };
+
   @override
   void initState() {
     super.initState();
@@ -1633,6 +1865,22 @@ class _ProcessScreenState extends State<ProcessScreen> {
     setState(() {
       _scrollOffset = _scrollController.offset;
     });
+  }
+
+  _CraftStepSpec _specFor(CraftStep step) {
+    return _stepSpecs[step.title] ??
+        const _CraftStepSpec(
+          titleTag: 'Craft Stage',
+          icon: Icons.layers_outlined,
+          accent: AppColors.accent,
+          support: AppColors.ink,
+          tools: ['观察', '判断', '执行'],
+          materials: ['结构', '层次', '节奏'],
+          checkpoints: ['先保证主次，再丰富细节'],
+          mistakes: ['不要让所有信息同时发声'],
+          deliverable: '完成该步骤对应的工艺目标。',
+          scene: _CraftPreviewScene.kernel,
+        );
   }
 
   @override
@@ -1702,6 +1950,49 @@ class _ProcessScreenState extends State<ProcessScreen> {
                       color: AppColors.textSecondary.withAlphaValue(0.92),
                       fontSize: 14,
                       height: 1.8,
+                    ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                  child: SizedBox(
+                    height: 42,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.steps.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final step = widget.steps[index];
+                        final spec = _specFor(step);
+                        final learned = widget.learnedStepTitles.contains(
+                          step.title,
+                        );
+                        return InputChip(
+                          avatar: Icon(
+                            spec.icon,
+                            size: 16,
+                            color: learned ? Colors.black : spec.accent,
+                          ),
+                          label: Text(step.title),
+                          onPressed: () => _showStepSheet(context, step, index),
+                          selected: learned,
+                          showCheckmark: false,
+                          selectedColor: spec.accent,
+                          backgroundColor: AppColors.surface,
+                          labelStyle: TextStyle(
+                            color: learned
+                                ? Colors.black
+                                : AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          side: BorderSide(
+                            color: learned ? spec.accent : Colors.white10,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -1780,9 +2071,11 @@ class _ProcessScreenState extends State<ProcessScreen> {
                 itemCount: widget.steps.length,
                 itemBuilder: (context, index) {
                   final step = widget.steps[index];
+                  final spec = _specFor(step);
                   return _ProcessCard(
                     index: index,
                     step: step,
+                    spec: spec,
                     isLearned: widget.learnedStepTitles.contains(step.title),
                     onTap: () => _showStepSheet(context, step, index),
                   );
@@ -1799,6 +2092,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
   void _showStepSheet(BuildContext context, CraftStep step, int index) {
     HapticFeedback.lightImpact();
     widget.onStepLearned(step.title);
+    final spec = _specFor(step);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1828,10 +2122,29 @@ class _ProcessScreenState extends State<ProcessScreen> {
                 ),
                 Text(
                   '0${index + 1} ${step.title}',
-                  style: const TextStyle(
-                    color: AppColors.accent,
+                  style: TextStyle(
+                    color: spec.accent,
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: spec.accent.withAlphaValue(0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    spec.titleTag,
+                    style: TextStyle(
+                      color: spec.accent,
+                      fontSize: 11,
+                      letterSpacing: 1.3,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -1844,7 +2157,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _AnimatedPreview(index: index),
+                _AnimatedPreview(spec: spec),
                 const SizedBox(height: 18),
                 Text(
                   step.detail,
@@ -1855,6 +2168,51 @@ class _ProcessScreenState extends State<ProcessScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: spec.materials
+                      .map(
+                        (item) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: spec.accent.withAlphaValue(0.10),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            item,
+                            style: TextStyle(
+                              color: spec.accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                _CraftInfoBlock(
+                  title: '本步工具与动作',
+                  accent: spec.accent,
+                  items: spec.tools,
+                ),
+                const SizedBox(height: 12),
+                _CraftInfoBlock(
+                  title: '核心判断点',
+                  accent: spec.accent,
+                  items: spec.checkpoints,
+                ),
+                const SizedBox(height: 12),
+                _CraftInfoBlock(
+                  title: '常见误区',
+                  accent: const Color(0xFFE39A66),
+                  items: spec.mistakes,
+                ),
+                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
@@ -1862,12 +2220,39 @@ class _ProcessScreenState extends State<ProcessScreen> {
                     color: AppColors.surfaceSoft,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Text(
-                    '阅读焦点：${step.focus}',
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                      height: 1.7,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '阅读焦点：${step.focus}',
+                        style: TextStyle(
+                          color: spec.accent,
+                          fontSize: 13,
+                          height: 1.7,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '本步产出：${spec.deliverable}',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          height: 1.7,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(spec.icon),
+                    label: const Text('完成本步阅读'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: spec.accent,
+                      foregroundColor: Colors.black,
                     ),
                   ),
                 ),
@@ -1909,12 +2294,34 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
     '20,000 - 50,000 元',
     '50,000 元以上',
   ];
+  static const List<String> _scenarioOptions = [
+    '学校 / 研学课程',
+    '博物馆 / 展馆专题',
+    '品牌活动 / 联名传播',
+    '文旅导览 / 公共文化',
+  ];
+  static const List<String> _launchWindowOptions = [
+    '尽快启动',
+    '1 个月内',
+    '1 - 3 个月',
+    '先做方案储备',
+  ];
+  static const List<String> _deliverableFocusOptions = [
+    '互动体验页',
+    '策展内容包',
+    '课程讲义与活动脚本',
+    '品牌传播提案',
+  ];
 
   final TextEditingController _contactController = TextEditingController();
   final TextEditingController _organizationController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
+  int _wizardStep = 0;
   String? _selectedPackageId;
   String _selectedBudget = _budgetOptions.first;
+  String _selectedScenario = _scenarioOptions.first;
+  String _selectedLaunchWindow = _launchWindowOptions.first;
+  String _selectedDeliverableFocus = _deliverableFocusOptions.first;
 
   @override
   void initState() {
@@ -1932,6 +2339,97 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
     super.dispose();
   }
 
+  int get _completedFieldCount {
+    var count = 0;
+    if (_selectedPackageId != null) count++;
+    if (_contactController.text.trim().isNotEmpty) count++;
+    if (_organizationController.text.trim().isNotEmpty) count++;
+    if (_messageController.text.trim().length >= 12) count++;
+    if (_selectedScenario.isNotEmpty) count++;
+    if (_selectedDeliverableFocus.isNotEmpty) count++;
+    return count;
+  }
+
+  int get _readinessScore {
+    final base = (_completedFieldCount / 6) * 70;
+    final contextBoost =
+        (widget.favoriteCount > 0 ? 10 : 0) +
+        (widget.learnedStepCount > 0 ? 8 : 0) +
+        (widget.archivedWorkCount > 0 ? 12 : 0);
+    return (base + contextBoost).round().clamp(0, 100);
+  }
+
+  String get _recommendedPackageId {
+    if (_selectedScenario.contains('学校')) {
+      return 'package_education';
+    }
+    if (_selectedScenario.contains('博物馆') ||
+        _selectedScenario.contains('展馆') ||
+        _selectedScenario.contains('文旅')) {
+      return 'package_exhibition';
+    }
+    return 'package_brand';
+  }
+
+  String get _suggestedNextStep {
+    if (_selectedLaunchWindow == '尽快启动') {
+      return '建议 24 小时内安排需求澄清会，先锁定范围与时间节点。';
+    }
+    if (_readinessScore >= 80) {
+      return '信息较完整，可以直接进入方案草案与报价准备。';
+    }
+    return '建议先补齐机构信息、交付重点和时间窗口，再进入正式方案阶段。';
+  }
+
+  String _buildInquirySummary(ServicePackage package) {
+    return '''
+榄雕云艺 商务摘要
+
+一、基础信息
+- 服务包：${package.title}
+- 合作场景：$_selectedScenario
+- 上线时间：$_selectedLaunchWindow
+- 预算范围：$_selectedBudget
+- 交付重点：$_selectedDeliverableFocus
+
+二、客户信息
+- 联系人：${_contactController.text.trim().isEmpty ? '未填写' : _contactController.text.trim()}
+- 机构 / 品牌：${_organizationController.text.trim().isEmpty ? '未填写' : _organizationController.text.trim()}
+
+三、需求摘要
+${_messageController.text.trim()}
+
+四、系统诊断
+- 推荐服务包：${package.title}
+- 需求成熟度：$_readinessScore / 100
+- 下一步建议：$_suggestedNextStep
+
+五、交付建议
+${package.deliverables.map((item) => '- $item').join('\n')}
+''';
+  }
+
+  Future<void> _exportInquiryBrief(ServicePackage? activePackage) async {
+    if (activePackage == null || _messageController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先完善需求信息后再导出摘要')));
+      return;
+    }
+    final path = await saveTextDocument(
+      _buildInquirySummary(activePackage),
+      'service_brief_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(path == null || path.isEmpty ? '摘要已生成' : '摘要已导出到：$path'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedPackage = widget.content.servicePackages.where(
@@ -1940,6 +2438,12 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
     final activePackage = selectedPackage.isEmpty
         ? null
         : selectedPackage.first;
+    final recommendedPackage = widget.content.servicePackages.where(
+      (item) => item.id == _recommendedPackageId,
+    );
+    final suggestedPackage = recommendedPackage.isEmpty
+        ? activePackage
+        : recommendedPackage.first;
 
     return CustomScrollView(
       slivers: [
@@ -2031,7 +2535,117 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                             label: '服务包',
                             value: '${widget.content.servicePackages.length}',
                           ),
+                          _ServiceMetricPill(
+                            label: '需求成熟度',
+                            value: '$_readinessScore',
+                          ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '商务诊断',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        suggestedPackage == null
+                            ? '当前正在等待你选择服务包。'
+                            : '根据你当前的合作场景，优先建议推进「${suggestedPackage.title}」。',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          height: 1.7,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceSoft,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '当前已补齐 $_completedFieldCount / 6 项关键信息，成熟度 $_readinessScore / 100。',
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                                height: 1.7,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _suggestedNextStep,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                                height: 1.7,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
+                  '合作推进流程',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 168,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: const [
+                      _BusinessFlowCard(
+                        step: '01',
+                        title: '需求澄清',
+                        detail: '确认合作场景、受众、上线时间和预算边界。',
+                      ),
+                      SizedBox(width: 12),
+                      _BusinessFlowCard(
+                        step: '02',
+                        title: '方案草案',
+                        detail: '输出内容结构、交互范围、交付清单和节奏建议。',
+                      ),
+                      SizedBox(width: 12),
+                      _BusinessFlowCard(
+                        step: '03',
+                        title: '演示确认',
+                        detail: '通过原型或示例页确认方向，进入商务沟通。',
+                      ),
+                      SizedBox(width: 12),
+                      _BusinessFlowCard(
+                        step: '04',
+                        title: '交付上线',
+                        detail: '完成内容交付、培训说明和后续运营建议。',
                       ),
                     ],
                   ),
@@ -2080,6 +2694,10 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                     itemBuilder: (context, index) {
                       return _MasterProfileCard(
                         profile: widget.content.masters[index],
+                        onTap: () => _showMasterProfileSheet(
+                          context,
+                          widget.content.masters[index],
+                        ),
                       );
                     },
                   ),
@@ -2104,6 +2722,10 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                     itemBuilder: (context, index) {
                       return _TimelineCard(
                         item: widget.content.timeline[index],
+                        onTap: () => _showTimelineSheet(
+                          context,
+                          widget.content.timeline[index],
+                        ),
                       );
                     },
                   ),
@@ -2140,84 +2762,220 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedPackageId,
-                        decoration: const InputDecoration(labelText: '服务类型'),
-                        items: widget.content.servicePackages
-                            .map(
-                              (item) => DropdownMenuItem<String>(
-                                value: item.id,
-                                child: Text(item.title),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedPackageId = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedBudget,
-                        decoration: const InputDecoration(labelText: '预算范围'),
-                        items: _budgetOptions
-                            .map(
-                              (item) => DropdownMenuItem<String>(
-                                value: item,
-                                child: Text(item),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedBudget = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _contactController,
-                        decoration: const InputDecoration(
-                          labelText: '联系人',
-                          hintText: '可留姓名或岗位',
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _organizationController,
-                        decoration: const InputDecoration(
-                          labelText: '机构 / 品牌',
-                          hintText: '例如：博物馆、学校、文旅项目方',
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _messageController,
-                        maxLines: 4,
-                        decoration: const InputDecoration(
-                          labelText: '需求说明',
-                          hintText: '填写目标场景、时间节点、交付预期等',
-                        ),
-                      ),
+                      _ServiceWizardHeader(currentStep: _wizardStep),
                       const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => _saveInquiry(activePackage),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                      if (_wizardStep == 0) ...[
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedPackageId,
+                          decoration: const InputDecoration(labelText: '服务类型'),
+                          items: widget.content.servicePackages
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item.id,
+                                  child: Text(item.title),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedPackageId = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedScenario,
+                          decoration: const InputDecoration(labelText: '合作场景'),
+                          items: _scenarioOptions
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedScenario = value;
+                              _selectedPackageId = _recommendedPackageId;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedBudget,
+                          decoration: const InputDecoration(labelText: '预算范围'),
+                          items: _budgetOptions
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedBudget = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedLaunchWindow,
+                          decoration: const InputDecoration(labelText: '上线时间'),
+                          items: _launchWindowOptions
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedLaunchWindow = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedDeliverableFocus,
+                          decoration: const InputDecoration(labelText: '交付重点'),
+                          items: _deliverableFocusOptions
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedDeliverableFocus = value;
+                            });
+                          },
+                        ),
+                      ] else if (_wizardStep == 1) ...[
+                        TextField(
+                          controller: _contactController,
+                          decoration: const InputDecoration(
+                            labelText: '联系人',
+                            hintText: '可留姓名或岗位',
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _organizationController,
+                          decoration: const InputDecoration(
+                            labelText: '机构 / 品牌',
+                            hintText: '例如：博物馆、学校、文旅项目方',
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSoft,
+                            borderRadius: BorderRadius.circular(18),
                           ),
                           child: const Text(
-                            '保存到本地需求档案',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                            '这一阶段重点确认对接人和组织名称，便于后续方案、报价和排期沟通。',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              height: 1.7,
+                            ),
                           ),
                         ),
+                      ] else ...[
+                        TextField(
+                          controller: _messageController,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: '需求说明',
+                            hintText: '填写目标场景、时间节点、交付预期等',
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSoft,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Text(
+                            _buildInquirySummary(
+                              activePackage ?? suggestedPackage!,
+                            ),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              height: 1.8,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _wizardStep > 0
+                                  ? () {
+                                      setState(() {
+                                        _wizardStep--;
+                                      });
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.arrow_back),
+                              label: const Text('上一步'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _wizardStep < 2
+                                  ? () {
+                                      setState(() {
+                                        _wizardStep++;
+                                      });
+                                    }
+                                  : () => _saveInquiry(activePackage),
+                              icon: Icon(
+                                _wizardStep < 2
+                                    ? Icons.arrow_forward
+                                    : Icons.save_outlined,
+                              ),
+                              label: Text(_wizardStep < 2 ? '下一步' : '提交需求'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.accent,
+                                foregroundColor: Colors.black,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: activePackage == null
+                            ? null
+                            : () => _exportInquiryBrief(activePackage),
+                        icon: const Icon(Icons.description_outlined),
+                        label: const Text('导出报价 / 方案摘要'),
                       ),
                     ],
                   ),
@@ -2257,6 +3015,17 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _InquiryStageChip(stage: item.stage),
+                                    _InquiryPriorityChip(
+                                      priority: item.priority,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 Text(
                                   '${item.organization.isEmpty ? '未填写机构' : item.organization} · ${item.budget}',
                                   style: const TextStyle(
@@ -2264,6 +3033,24 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
                                     fontSize: 13,
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${item.scenario} · ${item.launchWindow} · ${item.deliverableFocus}',
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (item.nextAction.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '下一步：${item.nextAction}',
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 Text(
                                   item.message,
@@ -2341,13 +3128,27 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
 
     widget.onSubmitInquiry(
       ServiceInquiry(
+        id: 'inq_${DateTime.now().microsecondsSinceEpoch}',
         packageId: activePackage.id,
         packageTitle: activePackage.title,
         contactName: _contactController.text.trim(),
         organization: _organizationController.text.trim(),
         budget: _selectedBudget,
+        scenario: _selectedScenario,
+        launchWindow: _selectedLaunchWindow,
+        deliverableFocus: _selectedDeliverableFocus,
         message: _messageController.text.trim(),
+        stage: InquiryStage.newLead,
+        priority: _resolvePriority(_selectedBudget),
+        ownerName: '',
+        proposalTitle: '',
+        estimatedValue: '',
+        nextAction: '24 小时内联系确认需求边界',
+        adminNote: '',
+        reminderAt: null,
+        followUps: const [],
         timestamp: DateTime.now(),
+        lastUpdatedAt: DateTime.now(),
       ),
     );
 
@@ -2357,6 +3158,180 @@ class _ServiceHubScreenState extends State<ServiceHubScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('需求已保存到本地档案，可继续补充和演示')));
+  }
+
+  InquiryPriority _resolvePriority(String budget) {
+    if (budget.contains('50,000')) {
+      return InquiryPriority.strategic;
+    }
+    if (budget.contains('20,000')) {
+      return InquiryPriority.high;
+    }
+    return InquiryPriority.normal;
+  }
+
+  void _showMasterProfileSheet(BuildContext context, MasterProfile profile) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  profile.name,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  profile.title,
+                  style: const TextStyle(color: AppColors.accent, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  profile.specialty,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    height: 1.7,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '“${profile.quote}”',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.7,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showTimelineSheet(BuildContext context, TimelineMilestone item) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.year,
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.title,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  item.summary,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                    height: 1.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _InquiryStageChip extends StatelessWidget {
+  final InquiryStage stage;
+
+  const _InquiryStageChip({required this.stage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withAlphaValue(0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        stage.label,
+        style: const TextStyle(
+          color: AppColors.accent,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _InquiryPriorityChip extends StatelessWidget {
+  final InquiryPriority priority;
+
+  const _InquiryPriorityChip({required this.priority});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (priority) {
+      InquiryPriority.normal => Colors.white70,
+      InquiryPriority.high => const Color(0xFFF7B955),
+      InquiryPriority.strategic => const Color(0xFFFF7A59),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        priority.label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 
@@ -2504,8 +3479,175 @@ class _ServicePackageCard extends StatelessWidget {
 
 class _MasterProfileCard extends StatelessWidget {
   final MasterProfile profile;
+  final VoidCallback onTap;
 
-  const _MasterProfileCard({required this.profile});
+  const _MasterProfileCard({required this.profile, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Ink(
+          width: 220,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlphaValue(0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.person_outline,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                profile.name,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                profile.title,
+                style: const TextStyle(color: AppColors.accent, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                profile.specialty,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '“${profile.quote}”',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.7,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.open_in_new, color: AppColors.textSecondary),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineCard extends StatelessWidget {
+  final TimelineMilestone item;
+  final VoidCallback onTap;
+
+  const _TimelineCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Ink(
+          width: 220,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.year,
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.title,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Text(
+                  item.summary,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.7,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Row(
+                children: [
+                  Icon(
+                    Icons.open_in_new,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '查看展开说明',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BusinessFlowCard extends StatelessWidget {
+  final String step;
+  final String title;
+  final String detail;
+
+  const _BusinessFlowCard({
+    required this.step,
+    required this.title,
+    required this.detail,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2520,41 +3662,29 @@ class _MasterProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.accent.withAlphaValue(0.14),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.person_outline, color: AppColors.accent),
-          ),
-          const SizedBox(height: 12),
           Text(
-            profile.name,
+            step,
             style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 17,
+              color: AppColors.accent,
+              fontSize: 22,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            profile.title,
-            style: const TextStyle(color: AppColors.accent, fontSize: 12),
-          ),
           const SizedBox(height: 10),
           Text(
-            profile.specialty,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const Spacer(),
+          const SizedBox(height: 8),
           Text(
-            '“${profile.quote}”',
+            detail,
             style: const TextStyle(
               color: AppColors.textSecondary,
-              fontSize: 12,
+              fontSize: 13,
               height: 1.7,
             ),
           ),
@@ -2564,52 +3694,59 @@ class _MasterProfileCard extends StatelessWidget {
   }
 }
 
-class _TimelineCard extends StatelessWidget {
-  final TimelineMilestone item;
+class _ServiceWizardHeader extends StatelessWidget {
+  final int currentStep;
 
-  const _TimelineCard({required this.item});
+  const _ServiceWizardHeader({required this.currentStep});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.year,
-            style: const TextStyle(
-              color: AppColors.accent,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
+    const steps = ['业务判断', '客户信息', '需求摘要'];
+    return Row(
+      children: List.generate(steps.length, (index) {
+        final active = index <= currentStep;
+        return Expanded(
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active ? AppColors.accent : Colors.white12,
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    color: active ? Colors.black : Colors.white54,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  steps[index],
+                  style: TextStyle(
+                    color: active
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (index < steps.length - 1)
+                Container(
+                  width: 18,
+                  height: 1,
+                  color: active ? AppColors.accent : Colors.white24,
+                ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            item.title,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.summary,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
-              height: 1.7,
-            ),
-          ),
-        ],
-      ),
+        );
+      }),
     );
   }
 }
@@ -2809,12 +3946,14 @@ class _CircleAction extends StatelessWidget {
 class _ProcessCard extends StatelessWidget {
   final int index;
   final CraftStep step;
+  final _CraftStepSpec spec;
   final bool isLearned;
   final VoidCallback onTap;
 
   const _ProcessCard({
     required this.index,
     required this.step,
+    required this.spec,
     required this.isLearned,
     required this.onTap,
   });
@@ -2843,16 +3982,10 @@ class _ProcessCard extends StatelessWidget {
                   height: 44,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withAlphaValue(0.15),
+                    color: spec.accent.withAlphaValue(0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Text(
-                    '0${index + 1}',
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: Icon(spec.icon, color: spec.accent),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -2861,10 +3994,19 @@ class _ProcessCard extends StatelessWidget {
                     children: [
                       Text(
                         step.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        spec.titleTag,
+                        style: TextStyle(
+                          color: spec.accent,
+                          fontSize: 11,
+                          letterSpacing: 1.1,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -2895,9 +4037,9 @@ class _ProcessCard extends StatelessWidget {
 }
 
 class _AnimatedPreview extends StatefulWidget {
-  final int index;
+  final _CraftStepSpec spec;
 
-  const _AnimatedPreview({required this.index});
+  const _AnimatedPreview({required this.spec});
 
   @override
   State<_AnimatedPreview> createState() => _AnimatedPreviewState();
@@ -2933,53 +4075,246 @@ class _AnimatedPreviewState extends State<_AnimatedPreview>
           return Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF3A2D21), Color(0xFF161616)],
+                colors: [widget.spec.support, const Color(0xFF161616)],
               ),
             ),
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 18 + (progress * 180),
-                  top: 18,
-                  bottom: 18,
-                  child: Container(
-                    width: 2,
-                    color: AppColors.accent.withAlphaValue(0.45),
-                  ),
-                ),
-                Positioned(
-                  left: 24 + (progress * 160),
-                  top: 24 + (widget.index * 6),
-                  child: Transform.rotate(
-                    angle: 0.28,
-                    child: const Icon(
-                      Icons.edit,
-                      color: AppColors.accent,
-                      size: 18,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 18,
-                  right: 18,
-                  bottom: 18,
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 5,
-                    color: AppColors.accent,
-                    backgroundColor: Colors.white12,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ],
+            child: CustomPaint(
+              painter: _CraftPreviewPainter(
+                spec: widget.spec,
+                progress: progress,
+              ),
             ),
           );
         },
       ),
     );
+  }
+}
+
+enum _CraftPreviewScene { kernel, composition, blocking, detail, polish }
+
+class _CraftStepSpec {
+  final String titleTag;
+  final IconData icon;
+  final Color accent;
+  final Color support;
+  final List<String> tools;
+  final List<String> materials;
+  final List<String> checkpoints;
+  final List<String> mistakes;
+  final String deliverable;
+  final _CraftPreviewScene scene;
+
+  const _CraftStepSpec({
+    required this.titleTag,
+    required this.icon,
+    required this.accent,
+    required this.support,
+    required this.tools,
+    required this.materials,
+    required this.checkpoints,
+    required this.mistakes,
+    required this.deliverable,
+    required this.scene,
+  });
+}
+
+class _CraftInfoBlock extends StatelessWidget {
+  final String title;
+  final Color accent;
+  final List<String> items;
+
+  const _CraftInfoBlock({
+    required this.title,
+    required this.accent,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: accent,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CraftPreviewPainter extends CustomPainter {
+  final _CraftStepSpec spec;
+  final double progress;
+
+  const _CraftPreviewPainter({required this.spec, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final accentPaint = Paint()
+      ..color = spec.accent.withAlphaValue(0.85)
+      ..style = PaintingStyle.fill;
+    final linePaint = Paint()
+      ..color = spec.accent.withAlphaValue(0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final softLinePaint = Paint()
+      ..color = Colors.white.withAlphaValue(0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    switch (spec.scene) {
+      case _CraftPreviewScene.kernel:
+        for (int i = 0; i < 3; i++) {
+          final center = Offset(42 + i * 82 + progress * 6, size.height / 2);
+          final rect = Rect.fromCenter(center: center, width: 42, height: 64);
+          canvas.drawOval(
+            rect,
+            Paint()..color = spec.accent.withAlphaValue(0.18),
+          );
+          canvas.drawOval(rect.inflate(i == 1 ? 6 : 0), softLinePaint);
+        }
+      case _CraftPreviewScene.composition:
+        final frame = RRect.fromRectAndRadius(
+          Rect.fromLTWH(18, 18, size.width - 36, size.height - 36),
+          const Radius.circular(16),
+        );
+        canvas.drawRRect(frame, softLinePaint);
+        canvas.drawLine(
+          const Offset(18, 66),
+          Offset(size.width - 18, 66),
+          softLinePaint,
+        );
+        canvas.drawLine(
+          Offset(size.width * 0.38, 18),
+          Offset(size.width * 0.38, size.height - 18),
+          softLinePaint,
+        );
+        final path = Path()
+          ..moveTo(36, 94)
+          ..lineTo(size.width * 0.36, 56 - progress * 8)
+          ..lineTo(size.width * 0.72, 82 + progress * 6)
+          ..lineTo(size.width - 34, 42);
+        canvas.drawPath(path, linePaint);
+      case _CraftPreviewScene.blocking:
+        for (int i = 0; i < 4; i++) {
+          final left = 26.0 + i * 48.0;
+          final height = 26.0 + i * 12.0 + progress * 8.0;
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromLTWH(left, size.height - 24.0 - height, 30.0, height),
+              const Radius.circular(8),
+            ),
+            Paint()..color = spec.accent.withAlphaValue(0.18 + i * 0.08),
+          );
+        }
+        canvas.drawLine(
+          Offset(34 + progress * 120, 24),
+          Offset(58 + progress * 120, size.height - 28),
+          linePaint,
+        );
+      case _CraftPreviewScene.detail:
+        final ring = Rect.fromCenter(
+          center: Offset(size.width * 0.42, size.height * 0.54),
+          width: 82,
+          height: 82,
+        );
+        canvas.drawOval(ring, softLinePaint..strokeWidth = 3);
+        for (int i = 0; i < 4; i++) {
+          final y = 34.0 + i * 18.0;
+          canvas.drawLine(
+            Offset(32, y),
+            Offset(size.width - 36, y + progress * (i.isEven ? 8 : -8)),
+            linePaint,
+          );
+        }
+        canvas.drawCircle(
+          Offset(size.width * 0.42, size.height * 0.54),
+          8 + progress * 4,
+          accentPaint,
+        );
+      case _CraftPreviewScene.polish:
+        final polishPaint = Paint()
+          ..shader =
+              LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  spec.accent.withAlphaValue(0.12),
+                  spec.accent.withAlphaValue(0.42),
+                  Colors.white.withAlphaValue(0.08),
+                ],
+                stops: [0, progress.clamp(0.1, 0.9), 1],
+              ).createShader(
+                Rect.fromLTWH(20, 18, size.width - 40, size.height - 36),
+              );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(20, 18, size.width - 40, size.height - 36),
+            const Radius.circular(18),
+          ),
+          polishPaint,
+        );
+        canvas.drawLine(
+          Offset(26 + progress * 80, 30),
+          Offset(size.width - 26 + progress * 20, size.height - 34),
+          Paint()
+            ..color = Colors.white.withAlphaValue(0.34)
+            ..strokeWidth = 4,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CraftPreviewPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.spec != spec;
   }
 }
 
