@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "olive_carving" "\0"
+            VALUE "CompanyName", "EmoSakura" "\0"
+            VALUE "FileDescription", "Olive Carving desktop app" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "olive_carving" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 EmoSakura. All rights reserved." "\0"
             VALUE "OriginalFilename", "olive_carving.exe" "\0"
-            VALUE "ProductName", "olive_carving" "\0"
+            VALUE "ProductName", "Olive Carving" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

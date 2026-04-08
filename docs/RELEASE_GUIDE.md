@@ -1,6 +1,6 @@
 # 构建与发布指南
 
-本文档说明如何为榄雕云艺项目生成 Android 安装包，以及如何通过 GitHub Releases 对外提供下载。
+本文档说明如何为榄雕云艺项目生成 Android 安装包、Windows 桌面包与 Windows 安装器，以及如何通过 GitHub Releases 对外提供下载。
 
 ## 当前发布现状
 
@@ -13,6 +13,12 @@
 当前最新 Release：
 
 [https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1)
+
+当前推荐对外分发的资产包括：
+
+- Android：`app-release.apk`
+- Windows 安装器：`olive_carving_setup_v1.3.1.exe`
+- Windows 便携包：`olive_carving-windows-portable-v1.3.1.zip`
 
 ## 本地构建 APK
 
@@ -34,13 +40,46 @@ flutter build apk --release
 
 `build/app/outputs/flutter-apk/app-release.apk`
 
+## 本地构建 Windows 桌面版
+
+### 1. 构建 Windows Release
+
+```bash
+flutter build windows --release
+```
+
+### 2. 查看输出文件
+
+输出目录位于：
+
+`build/windows/x64/runner/Release/`
+
+这是一个可直接运行的桌面分发目录，包含 `olive_carving.exe`、依赖 DLL 与 `data/` 资源目录。
+
+### 3. 生成 Windows 安装器
+
+仓库已经补充 Inno Setup 脚本：
+
+`/windows/installer/olive_carving.iss`
+
+如果本机已安装 Inno Setup，可执行：
+
+```powershell
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows/installer/olive_carving.iss
+```
+
+默认输出目录：
+
+`build/windows/installer/`
+
 ## GitHub Actions 自动构建
 
 仓库中已经包含工作流文件：
 
 `/.github/workflows/android-release.yml`
+`/.github/workflows/windows-release.yml`
 
-工作流会执行以下步骤：
+Android 工作流会执行以下步骤：
 
 1. 拉取仓库代码
 2. 配置 Java 17
@@ -49,6 +88,18 @@ flutter build apk --release
 5. 执行 `flutter build apk --release`
 6. 上传 APK 作为 Actions Artifact
 7. 如果当前是标签构建，则自动把 APK 上传到 GitHub Release
+
+Windows 工作流会执行以下步骤：
+
+1. 拉取仓库代码
+2. 安装 Flutter
+3. 安装 Inno Setup
+4. 执行 `flutter pub get`
+5. 执行 `flutter build windows --release`
+6. 打包 Windows 便携版 ZIP
+7. 编译 Windows 安装器 `Setup.exe`
+8. 上传 ZIP 和安装器作为 Artifact
+9. 如果当前是标签构建，则自动把 ZIP 和安装器上传到 GitHub Release
 
 ## 两种发布方式
 
@@ -74,7 +125,11 @@ git tag -a v1.0.1 -m "Release v1.0.1"
 git push origin v1.0.1
 ```
 
-标签推送成功后，GitHub Actions 会自动构建并把 APK 附加到对应 Release。
+标签推送成功后，GitHub Actions 会自动构建并把以下资产附加到对应 Release：
+
+- Android APK
+- Windows 安装器
+- Windows 便携包
 
 ## 建议版本规范
 
@@ -139,6 +194,7 @@ cp android/key.properties.example android/key.properties
 3. 本地运行正常
 4. `flutter build apk --release` 能成功
 5. Release 页面说明已经更新
+6. Windows 安装器或便携包已成功生成
 
 ## 常见问题
 
@@ -151,13 +207,14 @@ cp android/key.properties.example android/key.properties
 - 图片路径是否写错
 - workflow 文件是否被误改
 
-### 2. Release 页面没有 APK
+### 2. Release 页面没有安装包
 
 请确认：
 
 - 是否是通过 `v*` 标签触发的构建
 - GitHub Actions 是否执行成功
 - Release 页面是否存在同名版本但附件未上传
+- Windows 工作流是否成功执行了 Inno Setup 打包
 
 ### 3. 安装时提示签名问题
 

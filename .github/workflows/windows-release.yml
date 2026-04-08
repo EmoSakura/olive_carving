@@ -1,0 +1,126 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-release:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.41.5"
+          cache: true
+
+      - name: Set release metadata
+        run: |
+          $refName = "${{ github.ref_name }}"
+          if ($refName -match '^v\d+\.\d+\.\d+$') {
+            $appVersion = $refName -replace '^v', ''
+          } else {
+            $match = Select-String -Path "pubspec.yaml" -Pattern '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)'
+            if ($match) {
+              $appVersion = $match.Matches[0].Groups[1].Value
+            } else {
+              $appVersion = $refName
+            }
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$appVersion"
+
+      - name: Install Inno Setup
+        run: |
+          winget install --id JRSoftware.InnoSetup -e --silent --accept-package-agreements --accept-source-agreements
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package portable archive
+        run: |
+          $portableZip = "build/windows/olive_carving-windows-portable-v$env:APP_VERSION.zip"
+          if (Test-Path $portableZip) {
+            Remove-Item $portableZip -Force
+          }
+          tar.exe -a -cf $portableZip -C "build/windows/x64/runner/Release" .
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "PORTABLE_ZIP=$((Resolve-Path $portableZip).Path)"
+
+      - name: Build Windows installer
+        run: |
+          New-Item -ItemType Directory -Force -Path "build/windows/installer" | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$env:APP_VERSION" "/DMyAppSourceDir=$((Resolve-Path 'build/windows/x64/runner/Release').Path)" "windows/installer/olive_carving.iss"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          $installer = Get-ChildItem "build/windows/installer/olive_carving_setup_v*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          Add-Content -Path $env:GITHUB_ENV -Value "INSTALLER_EXE=$($installer.FullName)"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: olive-carving-windows-release
+          path: |
+            ${{ env.PORTABLE_ZIP }}
+            ${{ env.INSTALLER_EXE }}
+          if-no-files-found: error
+
+      - name: Ensure GitHub release exists
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $notesFile = "docs/RELEASE_NOTES_$tag.md"
+
+          gh release view $tag 1>$null 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $notesFile) {
+              gh release create $tag --verify-tag --title "榄雕云艺 $tag" --notes-file $notesFile
+            } else {
+              gh release create $tag --verify-tag --title "榄雕云艺 $tag" --generate-notes
+            }
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 3
+            }
+          }
+
+          for ($i = 0; $i -lt 5; $i++) {
+            gh release view $tag 1>$null 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+            Start-Sleep -Seconds 3
+          }
+
+          Write-Error "GitHub release $tag is not available yet."
+          exit 1
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload ${{ github.ref_name }} "$env:PORTABLE_ZIP" "$env:INSTALLER_EXE" --clobber

@@ -8,6 +8,12 @@
 Release 下载：
 [https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1)
 
+当前 Release 资产包含：
+
+- Android 安装包 `app-release.apk`
+- Windows 安装器 `olive_carving_setup_v1.3.1.exe`
+- Windows 便携包 `olive_carving-windows-portable-v1.3.1.zip`
+
 ## 项目概览
 
 本项目当前包含 6 个面向用户的核心体验层，以及 1 个运营后台层：
@@ -90,7 +96,7 @@ Release 下载：
 - 自定义 `CustomPainter` 绘制背景、雕刻轨迹和粒子效果
 - Shared element / 自定义过渡动画
 - 本地项目文件与摘要导出
-- GitHub Actions 自动构建 Android Release APK
+- GitHub Actions 自动构建 Android Release APK 与 Windows 安装器
 
 ## 运行环境
 
@@ -164,11 +170,22 @@ flutter build apk --release
 
 `build/app/outputs/flutter-apk/app-release.apk`
 
+### 本地生成 Windows 桌面版
+
+```bash
+flutter build windows --release
+```
+
+构建产物默认位于：
+
+`build/windows/x64/runner/Release/`
+
 ### GitHub Actions 自动构建
 
 仓库已配置自动构建工作流：
 
 [`android-release.yml`](.github/workflows/android-release.yml)
+[`windows-release.yml`](.github/workflows/windows-release.yml)
 
 更详细的发布说明可查看：
 
