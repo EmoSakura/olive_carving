@@ -12,7 +12,7 @@
 
 当前最新 Release：
 
-[https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0)
+[https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1)
 
 ## 本地构建 APK
 

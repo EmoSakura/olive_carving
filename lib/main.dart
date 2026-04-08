@@ -889,6 +889,25 @@ class _GalleryScreenState extends State<GalleryScreen> {
       .whereType<Exhibit>()
       .toList();
 
+  Exhibit? _findExhibitById(Iterable<Exhibit> exhibits, String id) {
+    for (final exhibit in exhibits) {
+      if (exhibit.id == id) {
+        return exhibit;
+      }
+    }
+    return null;
+  }
+
+  Exhibit? _coverExhibitFor(FeaturedCollection collection) {
+    for (final exhibitId in collection.exhibitIds) {
+      final cover = _findExhibitById(widget.exhibits, exhibitId);
+      if (cover != null) {
+        return cover;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
@@ -990,7 +1009,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ),
                   const SizedBox(height: 10),
                   SizedBox(
-                    height: 156,
+                    height: 188,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: widget.featuredCollections.length,
@@ -1002,6 +1021,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             collection.id == _selectedCollectionId;
                         return _FeaturedCollectionCard(
                           collection: collection,
+                          coverExhibit: _coverExhibitFor(collection),
                           selected: isSelected,
                           onTap: () {
                             setState(() {
@@ -1284,11 +1304,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
 class _FeaturedCollectionCard extends StatelessWidget {
   final FeaturedCollection collection;
+  final Exhibit? coverExhibit;
   final bool selected;
   final VoidCallback onTap;
 
   const _FeaturedCollectionCard({
     required this.collection,
+    required this.coverExhibit,
     required this.selected,
     required this.onTap,
   });
@@ -1303,7 +1325,6 @@ class _FeaturedCollectionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
               gradient: LinearGradient(
@@ -1320,66 +1341,152 @@ class _FeaturedCollectionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        collection.title,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(22),
+                  ),
+                  child: SizedBox(
+                    height: 68,
+                    width: double.infinity,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (coverExhibit != null)
+                          AssetArtwork(path: coverExhibit!.image)
+                        else
+                          const _CollectionCoverFallback(),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.06),
+                                Colors.black.withValues(alpha: 0.58),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              collection.estimatedTime,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: 10,
+                          child: Text(
+                            coverExhibit?.title ?? collection.highlight,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    Icon(
-                      selected ? Icons.check_circle : Icons.north_east,
-                      color: selected
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                collection.title,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              selected ? Icons.check_circle : Icons.north_east,
+                              color: selected
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          collection.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            height: 1.55,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          collection.highlight,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 11,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  collection.subtitle,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    height: 1.7,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withAlphaValue(0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    collection.estimatedTime,
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  collection.highlight,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    height: 1.6,
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CollectionCoverFallback extends StatelessWidget {
+  const _CollectionCoverFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3A2D21), AppColors.surface],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.photo_library_outlined,
+        color: AppColors.accent,
+        size: 28,
       ),
     );
   }
@@ -2685,7 +2792,7 @@ ${package.deliverables.map((item) => '- $item').join('\n')}
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
-                  height: 182,
+                  height: 228,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: widget.content.masters.length,
@@ -2713,7 +2820,7 @@ ${package.deliverables.map((item) => '- $item').join('\n')}
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
-                  height: 172,
+                  height: 188,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: widget.content.timeline.length,
@@ -3492,7 +3599,7 @@ class _MasterProfileCard extends StatelessWidget {
         onTap: onTap,
         child: Ink(
           width: 220,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(22),
@@ -3514,7 +3621,7 @@ class _MasterProfileCard extends StatelessWidget {
                   color: AppColors.accent,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
                 profile.name,
                 style: const TextStyle(
@@ -3523,33 +3630,49 @@ class _MasterProfileCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 profile.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppColors.accent, fontSize: 12),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
                 profile.specialty,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 13,
+                  height: 1.5,
                 ),
               ),
               const Spacer(),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       '“${profile.quote}”',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
-                        height: 1.7,
+                        height: 1.5,
                       ),
                     ),
                   ),
-                  const Icon(Icons.open_in_new, color: AppColors.textSecondary),
+                  const SizedBox(width: 8),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.open_in_new,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -3575,7 +3698,7 @@ class _TimelineCard extends StatelessWidget {
         onTap: onTap,
         child: Ink(
           width: 220,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(22),
@@ -3605,10 +3728,12 @@ class _TimelineCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.summary,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
-                    height: 1.7,
+                    height: 1.6,
                   ),
                 ),
               ),

@@ -6,7 +6,7 @@
 [https://github.com/EmoSakura/olive_carving](https://github.com/EmoSakura/olive_carving)
 
 Release 下载：
-[https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.0)
+[https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1](https://github.com/EmoSakura/olive_carving/releases/tag/v1.3.1)
 
 ## 项目概览
 

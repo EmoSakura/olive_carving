@@ -56,6 +56,31 @@ class HomeScreen extends StatelessWidget {
       .whereType<Exhibit>()
       .toList();
 
+  Exhibit? _findExhibitById(Iterable<Exhibit> exhibits, String id) {
+    for (final exhibit in exhibits) {
+      if (exhibit.id == id) {
+        return exhibit;
+      }
+    }
+    return null;
+  }
+
+  Exhibit? _coverExhibitFor(FeaturedCollection collection) {
+    for (final exhibitId in collection.exhibitIds) {
+      final publishedMatch = _findExhibitById(_publishedExhibits, exhibitId);
+      if (publishedMatch != null) {
+        return publishedMatch;
+      }
+    }
+    for (final exhibitId in collection.exhibitIds) {
+      final fallbackMatch = _findExhibitById(content.exhibits, exhibitId);
+      if (fallbackMatch != null) {
+        return fallbackMatch;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final insights = ExperienceInsights.fromState(
@@ -199,7 +224,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
-                          height: 200,
+                          height: 280,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: content.featuredCollections.length,
@@ -212,6 +237,7 @@ class HomeScreen extends StatelessWidget {
                                 offsetY: 18,
                                 child: _CollectionCard(
                                   item: item,
+                                  coverExhibit: _coverExhibitFor(item),
                                   recommended:
                                       insights.recommendedCollection?.id ==
                                       item.id,
@@ -316,7 +342,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
-                          height: 172,
+                          height: 188,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: content.timeline.length,
@@ -801,11 +827,13 @@ class _RecommendationCard extends StatelessWidget {
 
 class _CollectionCard extends StatelessWidget {
   final FeaturedCollection item;
+  final Exhibit? coverExhibit;
   final bool recommended;
   final VoidCallback onTap;
 
   const _CollectionCard({
     required this.item,
+    required this.coverExhibit,
     required this.recommended,
     required this.onTap,
   });
@@ -820,7 +848,6 @@ class _CollectionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
               gradient: LinearGradient(
@@ -837,60 +864,136 @@ class _CollectionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  child: SizedBox(
+                    height: 96,
+                    width: double.infinity,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (coverExhibit != null)
+                          Image.asset(
+                            coverExhibit!.image,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return _CollectionCoverFallback(
+                                icon: Icons.photo_outlined,
+                              );
+                            },
+                          )
+                        else
+                          const _CollectionCoverFallback(
+                            icon: Icons.photo_outlined,
+                          ),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.08),
+                                Colors.black.withValues(alpha: 0.52),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.42),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              recommended
+                                  ? '推荐路线'
+                                  : '${item.exhibitIds.length} 件重点展品',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 14,
+                          right: 14,
+                          bottom: 12,
+                          child: Text(
+                            coverExhibit?.title ?? '策展封面待补充',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    Icon(
-                      recommended ? Icons.auto_awesome : Icons.north_east,
-                      color: recommended
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              recommended
+                                  ? Icons.auto_awesome
+                                  : Icons.north_east,
+                              color: recommended
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            height: 1.55,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          item.highlight,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  item.subtitle,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    height: 1.7,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withAlphaValue(0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    item.estimatedTime,
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  item.highlight,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    height: 1.6,
                   ),
                 ),
               ],
@@ -898,6 +1001,27 @@ class _CollectionCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CollectionCoverFallback extends StatelessWidget {
+  final IconData icon;
+
+  const _CollectionCoverFallback({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3A2D21), AppColors.surface],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(icon, color: AppColors.accent, size: 34),
     );
   }
 }
@@ -1101,7 +1225,7 @@ class _TimelineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 240,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
@@ -1130,10 +1254,12 @@ class _TimelineCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             item.summary,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 13,
-              height: 1.7,
+              height: 1.6,
             ),
           ),
         ],

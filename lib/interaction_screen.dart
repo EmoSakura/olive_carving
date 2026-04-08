@@ -883,46 +883,48 @@ class _InteractionScreenState extends State<InteractionScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _StudioBottomDock(
-                      items: [
-                        _StudioBottomDockItem(
-                          label: '工具',
-                          icon: _StudioSheetTab.tools.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.tools),
-                        ),
-                        _StudioBottomDockItem(
-                          label: '颜色',
-                          icon: _StudioSheetTab.colors.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.colors),
-                        ),
-                        _StudioBottomDockItem(
-                          label: '文字',
-                          icon: _StudioSheetTab.text.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.text),
-                        ),
-                        _StudioBottomDockItem(
-                          label: '素材',
-                          icon: _StudioSheetTab.assets.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.assets),
-                        ),
-                        _StudioBottomDockItem(
-                          label: '图层',
-                          icon: _StudioSheetTab.layers.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.layers),
-                        ),
-                        _StudioBottomDockItem(
-                          label: '导出',
-                          icon: _StudioSheetTab.export.icon,
-                          onTap: () =>
-                              _showQuickSettingsSheet(_StudioSheetTab.export),
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: _StudioBottomDock(
+                        items: [
+                          _StudioBottomDockItem(
+                            label: '工具',
+                            icon: _StudioSheetTab.tools.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.tools),
+                          ),
+                          _StudioBottomDockItem(
+                            label: '颜色',
+                            icon: _StudioSheetTab.colors.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.colors),
+                          ),
+                          _StudioBottomDockItem(
+                            label: '文字',
+                            icon: _StudioSheetTab.text.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.text),
+                          ),
+                          _StudioBottomDockItem(
+                            label: '素材',
+                            icon: _StudioSheetTab.assets.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.assets),
+                          ),
+                          _StudioBottomDockItem(
+                            label: '图层',
+                            icon: _StudioSheetTab.layers.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.layers),
+                          ),
+                          _StudioBottomDockItem(
+                            label: '导出',
+                            icon: _StudioSheetTab.export.icon,
+                            onTap: () =>
+                                _showQuickSettingsSheet(_StudioSheetTab.export),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -4131,7 +4133,6 @@ class _StudioBottomDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.surfaceSoft,
